@@ -12,7 +12,7 @@ with sync_playwright() as p:
     errors = []
     page.on('pageerror', lambda error: errors.append(str(error)))
     page.goto('http://127.0.0.1:3000')
-    page.locator('h1').wait_for()
+    page.locator('#home-view h1').wait_for()
     assert page.locator('#ring-value').inner_text() == '0원'
     assert page.locator('#ring-progress').evaluate('(el) => el.style.strokeDashoffset') == '0'
     page.locator('.desktop-record').click()

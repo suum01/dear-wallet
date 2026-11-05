@@ -1,3 +1,4 @@
+import { createHistory } from './history.js';
 import { emptyState, parseState, summarize, todayISO, validAmount, validDate, getPeriod } from './domain.js';
 const $ = s => document.querySelector(s);
 const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -24,6 +25,10 @@ function persist(next) {
   try { localStorage.setItem(KEY, JSON.stringify(next)); state = next; return true; } catch { toast('저장하지 못했어요. 브라우저 저장 공간과 권한을 확인해주세요.'); return false; }
 }
 const current = () => demo || state;
+let activeView = 'home', recordReturnDate = null;
+const historyUI = createHistory({ getState: current, onOpenSheet: trigger => { $('#day-dialog').returnFocus = trigger; }, onRecord: (date, trigger) => {
+  openDialog('record', trigger); $('#record-form').elements.date.value = date; recordReturnDate = date;
+} });
 const money = n => `${new Intl.NumberFormat('ko-KR').format(n)}원`;
 const shortDate = s => `${Number(s.slice(5,7))}.${Number(s.slice(8,10))}`;
 const tips = [
@@ -60,11 +65,12 @@ function render() {
   const tip = tips[tipIndex()]; $('#tip-category').textContent = tip[0]; $('#tip-title').textContent = tip[1]; $('#tip-body').textContent = tip[2]; $('#tip-source').href = tip[3];
   const bookmarked = s.bookmarks.includes(tipIndex()); $('#bookmark-tip').setAttribute('aria-pressed', String(bookmarked)); $('#bookmark-tip').setAttribute('aria-label', bookmarked ? '오늘의 금융 상식 저장 해제' : '오늘의 금융 상식 저장'); $('#bookmark-tip svg').style.fill = bookmarked ? '#f8df83' : 'none';
   $('#demo-banner').hidden = !demo;
+  historyUI.render();
 }
-let opener;
 function openDialog(name, trigger) {
-  opener = trigger;
+  $(`#${name}-dialog`).returnFocus = trigger;
   if (name === 'record') {
+    recordReturnDate = null;
     const form = $('#record-form'); form.reset(); form.elements.date.value = todayISO();
     const select = form.elements.fixedId; select.replaceChildren(new Option('아니요', ''));
     current().fixedCosts.forEach(f => select.add(new Option(`${f.name} · ${money(f.amount)}`, f.id)));
@@ -87,9 +93,36 @@ document.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click'
 document.querySelectorAll('dialog').forEach(dialog => {
   dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
   dialog.addEventListener('click', e => { if (e.target === dialog) { const r = dialog.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) dialog.close(); } });
-  dialog.addEventListener('close', () => opener?.focus());
+  dialog.addEventListener('close', () => {
+    if (dialog.id === 'record-dialog' && recordReturnDate && activeView === 'history') {
+      const date = recordReturnDate; recordReturnDate = null; historyUI.showDay(date); return;
+    }
+    if (!document.querySelector('dialog[open]')) dialog.returnFocus?.focus();
+  });
 });
-document.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => { if (b.dataset.nav === 'home') { window.scrollTo({top:0,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'}); } else { toast(`${b.dataset.nav === 'history' ? '달력 내역' : '돌아보기'} 화면은 다음 단계에서 만들 예정이에요. 지금은 홈과 기록·예산 설정을 사용할 수 있어요.`); } }));
+function navigate(view, focus = false) {
+  activeView = view === 'history' ? 'history' : 'home';
+  $('#home-view').hidden = activeView !== 'home'; $('#history-view').hidden = activeView !== 'history';
+  $('.breadcrumb strong').textContent = activeView === 'home' ? '홈' : '내역';
+  document.title = `${activeView === 'home' ? '홈' : '내역'} — Dear Wallet`;
+  document.querySelectorAll('[data-nav]').forEach(button => {
+    const selected = button.dataset.nav === activeView;
+    button.classList.toggle('active', selected);
+    if (selected) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
+  });
+  historyUI.render();
+  if (focus) {
+    window.scrollTo({top:0, behavior:'instant'});
+    const heading = document.querySelector(activeView === 'home' ? '#home-view h1' : '#history-title');
+    heading.tabIndex = -1; heading.focus({preventScroll:true});
+  }
+}
+document.querySelectorAll('[data-nav]').forEach(button => button.addEventListener('click', () => {
+  if (button.dataset.nav === 'review') { toast('돌아보기는 다음 단계에서 만들 예정이에요. 먼저 달력에서 기록을 확인해보세요.'); return; }
+  const view = button.dataset.nav;
+  if (location.hash !== `#${view}`) location.hash = view; else navigate(view, true);
+}));
+window.addEventListener('hashchange', () => navigate(location.hash.slice(1), true));
 $('#record-form').addEventListener('submit', e => {
   e.preventDefault(); const form = e.currentTarget, data = new FormData(form); const amount = Number(data.get('amount')), date = data.get('date'), merchant = data.get('merchant').trim(), type = data.get('type');
   const error = form.querySelector('.form-error');
@@ -126,4 +159,5 @@ $('#bookmark-tip').addEventListener('click', () => { const next = structuredClon
 $('#export-data').addEventListener('click', () => { const blob = new Blob([JSON.stringify(current(), null, 2)],{type:'application/json'}); const url=URL.createObjectURL(blob), link=document.createElement('a'); link.href=url; link.download=`dear-wallet-${todayISO()}${demo?'-sample':''}.json`; link.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); toast('기록 파일을 내려받았어요. 현재 앱에는 파일 복원 기능이 없어요.'); });
 window.addEventListener('storage', e => { if (e.key !== KEY || demo) return; const loaded=e.newValue === null ? emptyState() : parseState(e.newValue); if (loaded) {state=loaded; render();} else {storageBlocked=true; toast('다른 창의 데이터를 확인할 수 없어 저장을 중지했어요.');} });
 let lastDay=todayISO(); setInterval(()=>{if(todayISO()!==lastDay){lastDay=todayISO();render();}},60000);
+navigate(location.hash.slice(1));
 render(); if (storageBlocked) toast('브라우저 저장 공간이나 기존 데이터를 확인해주세요. 기록을 덮어쓰지 않도록 저장을 중지했어요.');
