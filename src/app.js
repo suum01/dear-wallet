@@ -25,9 +25,11 @@ function persist(next) {
   try { localStorage.setItem(KEY, JSON.stringify(next)); state = next; return true; } catch { toast('저장하지 못했어요. 브라우저 저장 공간과 권한을 확인해주세요.'); return false; }
 }
 const current = () => demo || state;
-let activeView = 'home', recordReturnDate = null;
+let activeView = 'home', recordReturnDate = null, editingEntry = null, undoDeletion = null;
 const historyUI = createHistory({ getState: current, onOpenSheet: trigger => { $('#day-dialog').returnFocus = trigger; }, onRecord: (date, trigger) => {
   openDialog('record', trigger); $('#record-form').elements.date.value = date; recordReturnDate = date;
+}, onEdit: (entry, date, trigger) => {
+  openDialog('record', trigger, entry); recordReturnDate = date;
 } });
 const money = n => `${new Intl.NumberFormat('ko-KR').format(n)}원`;
 const shortDate = s => `${Number(s.slice(5,7))}.${Number(s.slice(8,10))}`;
@@ -66,15 +68,23 @@ function render() {
   const bookmarked = s.bookmarks.includes(tipIndex()); $('#bookmark-tip').setAttribute('aria-pressed', String(bookmarked)); $('#bookmark-tip').setAttribute('aria-label', bookmarked ? '오늘의 금융 상식 저장 해제' : '오늘의 금융 상식 저장'); $('#bookmark-tip svg').style.fill = bookmarked ? '#f8df83' : 'none';
   $('#demo-banner').hidden = !demo;
   historyUI.render();
+  renderUndo();
 }
-function openDialog(name, trigger) {
+function openDialog(name, trigger, entry = null) {
   $(`#${name}-dialog`).returnFocus = trigger;
   if (name === 'record') {
-    recordReturnDate = null;
+    recordReturnDate = null; editingEntry = entry ? structuredClone(entry) : null;
+    $('#record-title').textContent = entry ? '기록을 다듬어요' : '오늘의 작은 기록';
+    $('#record-dialog .dialog-description').textContent = entry ? '바뀐 내용은 달력과 예산에 함께 반영돼요.' : '카테고리 고민 없이, 쓴 만큼만 남겨요.';
+    $('#record-form [type=submit]').textContent = entry ? '수정 저장하기' : '기록 저장하기';
+    $('#delete-record').hidden = !entry; $('#delete-confirm').hidden = true;
+    $('#category-label').hidden = !entry;
     const form = $('#record-form'); form.reset(); form.elements.date.value = todayISO();
     const select = form.elements.fixedId; select.replaceChildren(new Option('아니요', ''));
     current().fixedCosts.forEach(f => select.add(new Option(`${f.name} · ${money(f.amount)}`, f.id)));
-    $('#fixed-link-label').hidden = !current().fixedCosts.length;
+    if (entry?.fixedId && !current().fixedCosts.some(cost => cost.id === entry.fixedId)) select.add(new Option('이전에 연결한 고정비 · 현재 목록 없음', entry.fixedId));
+    if (entry) for (const field of ['type', 'amount', 'date', 'merchant', 'reason', 'category', 'fixedId']) form.elements[field].value = entry[field] ?? '';
+    updateRecordFields();
   }
   if (name === 'budget') {
     const v = summarize(current()); $('#budget-form').elements.budget.value = v.budget ?? '';
@@ -128,10 +138,62 @@ $('#record-form').addEventListener('submit', e => {
   const error = form.querySelector('.form-error');
   if (!validAmount(amount) || !validDate(date) || !merchant) { error.textContent = '금액, 날짜와 사용처를 확인해주세요.'; return; }
   if (date > todayISO()) { error.textContent = '미래의 거래는 아직 기록할 수 없어요. 예정 지출은 고정비로 등록해주세요.'; return; }
-  const next = structuredClone(current()); next.entries.push({id:newId(), amount, date, merchant, type, reason:data.get('reason').trim(), fixedId: type === 'expense' ? data.get('fixedId') || null : null, category: type === 'expense' ? '미분류' : type === 'income' ? '기타 수입' : '내부 이체'});
-  if (!persist(next)) return; $('#record-dialog').close(); render();
-  const p = summarize(next).period; toast(date < p.start || date > p.end ? '저장했어요. 현재 집계 기간 밖의 기록이에요.' : type === 'transfer' ? '내 계좌 간 이체로 저장했어요. 소비 합계에는 포함하지 않아요.' : type === 'expense' ? '기록했어요! 분류 기능은 준비 중이라 미분류로 보관했어요.' : '수입을 기록했어요. 지출 합계에는 포함하지 않아요.');
+  const next = structuredClone(current());
+  const index = editingEntry ? next.entries.findIndex(entry => entry.id === editingEntry.id) : -1;
+  if (editingEntry && (index < 0 || next.entries[index].deletedAt || JSON.stringify(next.entries[index]) !== JSON.stringify(editingEntry))) {
+    error.textContent = '이 기록이 다른 창에서 변경됐어요. 닫고 다시 열어 최신 내용을 확인해주세요.'; return;
+  }
+  const category = type === 'transfer' ? '내부 이체' : data.get('category').trim() || (type === 'expense' ? '미분류' : '기타 수입');
+  const entry = { ...(editingEntry || {}), id:editingEntry?.id || newId(), amount, date, merchant, type, reason:data.get('reason').trim(), fixedId: type === 'expense' ? data.get('fixedId') || null : null, category, updatedAt:new Date().toISOString() };
+  if (editingEntry) next.entries[index] = entry; else next.entries.push(entry);
+  if (!persist(next)) { error.textContent = '저장하지 못했어요. 입력한 내용은 유지했으니 브라우저 저장 공간과 권한을 확인해주세요.'; return; }
+  const wasEditing = !!editingEntry;
+  if (recordReturnDate) recordReturnDate = date;
+  $('#record-dialog').close(); render();
+  const p = summarize(next).period;
+  toast(wasEditing ? '수정했어요. 달력과 예산에도 반영했어요.' : date < p.start || date > p.end ? '저장했어요. 현재 집계 기간 밖의 기록이에요.' : type === 'transfer' ? '내 계좌 간 이체로 저장했어요. 소비 합계에는 포함하지 않아요.' : type === 'expense' ? '기록했어요! 분류 기능은 준비 중이라 미분류로 보관했어요.' : '수입을 기록했어요. 지출 합계에는 포함하지 않아요.');
 });
+function updateRecordFields() {
+  const form = $('#record-form'), type = form.elements.type.value;
+  const expense = type === 'expense';
+  $('#fixed-link-label').hidden = !expense || (!current().fixedCosts.length && !editingEntry?.fixedId);
+  $('#category-label').hidden = !editingEntry || type === 'transfer';
+  const suggestions = type === 'income' ? ['급여', '부수입', '용돈', '기타 수입'] : ['미분류', '식비', '카페', '교통', '주거', '생활용품', '쇼핑', '의료', '문화', '기타'];
+  $('#category-options').replaceChildren(...suggestions.map(value => new Option(value, value)));
+}
+$('#record-form').elements.type.addEventListener('change', () => {
+  const form = $('#record-form'), type = form.elements.type.value;
+  form.elements.category.value = editingEntry?.type === type ? editingEntry.category || '' : '';
+  updateRecordFields();
+});
+$('#delete-record').addEventListener('click', () => { $('#delete-confirm').hidden = false; $('#cancel-delete').focus(); });
+$('#cancel-delete').addEventListener('click', () => { $('#delete-confirm').hidden = true; $('#delete-record').focus(); });
+$('#confirm-delete').addEventListener('click', () => {
+  if (!editingEntry) return;
+  const next = structuredClone(current()); const entry = next.entries.find(entry => entry.id === editingEntry.id);
+  const error = $('#record-form .form-error');
+  if (!entry || entry.deletedAt || JSON.stringify(entry) !== JSON.stringify(editingEntry)) { error.textContent = '이 기록이 다른 창에서 변경됐어요. 닫고 다시 열어 최신 내용을 확인해주세요.'; return; }
+  const deletedAt = new Date().toISOString(); entry.deletedAt = deletedAt; entry.updatedAt = deletedAt;
+  if (!persist(next)) { error.textContent = '삭제하지 못했어요. 기존 기록은 유지했어요.'; return; }
+  undoDeletion = { id:entry.id, deletedAt, merchant:entry.merchant, date:entry.date };
+  $('#record-dialog').close(); render(); toast('기록을 삭제했어요. 실행 취소로 되돌릴 수 있어요.');
+});
+function renderUndo() {
+  if (undoDeletion && !current().entries.some(entry => entry.id === undoDeletion.id && entry.deletedAt === undoDeletion.deletedAt)) undoDeletion = null;
+  document.querySelectorAll('[data-undo-notice]').forEach(notice => {
+    notice.hidden = !undoDeletion;
+    if (undoDeletion) notice.querySelector('span').textContent = `‘${undoDeletion.merchant}’ 기록을 삭제했어요.`;
+  });
+}
+document.querySelectorAll('[data-undo]').forEach(button => button.addEventListener('click', () => {
+  if (!undoDeletion) return;
+  const next = structuredClone(current()); const entry = next.entries.find(entry => entry.id === undoDeletion.id && entry.deletedAt === undoDeletion.deletedAt);
+  if (!entry) { undoDeletion = null; render(); toast('이미 변경된 기록이라 복원하지 않았어요.'); return; }
+  delete entry.deletedAt; entry.updatedAt = new Date().toISOString();
+  if (!persist(next)) return;
+  undoDeletion = null; render(); toast('기록을 되돌렸어요.');
+}));
+document.querySelectorAll('[data-dismiss-undo]').forEach(button => button.addEventListener('click', () => { undoDeletion = null; renderUndo(); }));
 function addFixedRow(cost = {}) {
   const row = document.createElement('div'); row.className = 'fixed-row'; row.dataset.id = cost.id || newId();
   row.innerHTML = '<label>이름<input name="fixedName" maxlength="40" required placeholder="월세"></label><label>금액 (원)<input name="fixedAmount" type="number" inputmode="numeric" min="1" max="999999999999" step="1" required placeholder="400000"></label><label>매월 (일)<input name="fixedDay" type="number" inputmode="numeric" min="1" max="31" step="1" required placeholder="25"></label><button type="button" class="icon-button" aria-label="고정비 삭제">×</button>';
@@ -151,10 +213,10 @@ for(let i=1;i<=31;i++) $('#settings-form').elements.payday.add(new Option(`매�
 $('#settings-form').elements.periodMode.addEventListener('change', e => { $('#payday-label').hidden = e.target.value !== 'payday'; });
 $('#settings-form').addEventListener('submit', e => { e.preventDefault(); const next = structuredClone(current()); next.settings = { periodMode:e.currentTarget.elements.periodMode.value, payday:Number(e.currentTarget.elements.payday.value) }; if (!persist(next)) return; $('#settings-dialog').close(); render(); toast('한 달의 기준을 저장했어요.'); });
 $('#start-demo').addEventListener('click', () => {
-  demo = emptyState(); demo.settings = {periodMode:'payday',payday:25}; const p = getPeriod(todayISO(),'payday',25); demo.budgets[p.start] = 1000000;
+  undoDeletion = null; demo = emptyState(); demo.settings = {periodMode:'payday',payday:25}; const p = getPeriod(todayISO(),'payday',25); demo.budgets[p.start] = 1000000;
   demo.fixedCosts = [{id:'sample-fixed',name:'관리비',amount:100000,day:20}]; demo.entries = [{id:'sample',amount:620000,date:todayISO(),merchant:'예시 누적 지출',reason:'홈 둘러보기용 데이터',type:'expense',fixedId:null}]; $('#settings-dialog').close(); render(); toast('샘플 모드예요. 여기서 한 변경은 내 기록에 저장되지 않아요.');
 });
-$('#exit-demo').addEventListener('click', () => { demo = null; render(); toast('내 가계부로 돌아왔어요.'); });
+$('#exit-demo').addEventListener('click', () => { undoDeletion = null; demo = null; render(); toast('내 가계부로 돌아왔어요.'); });
 $('#bookmark-tip').addEventListener('click', () => { const next = structuredClone(current()), id=tipIndex(); next.bookmarks = next.bookmarks.includes(id) ? next.bookmarks.filter(b=>b!==id) : [...next.bookmarks,id]; if (persist(next)) { render(); toast(next.bookmarks.includes(id) ? '상식을 저장했어요. 기록 파일에도 함께 보관돼요.' : '상식 저장을 해제했어요.'); } });
 $('#export-data').addEventListener('click', () => { const blob = new Blob([JSON.stringify(current(), null, 2)],{type:'application/json'}); const url=URL.createObjectURL(blob), link=document.createElement('a'); link.href=url; link.download=`dear-wallet-${todayISO()}${demo?'-sample':''}.json`; link.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); toast('기록 파일을 내려받았어요. 현재 앱에는 파일 복원 기능이 없어요.'); });
 window.addEventListener('storage', e => { if (e.key !== KEY || demo) return; const loaded=e.newValue === null ? emptyState() : parseState(e.newValue); if (loaded) {state=loaded; render();} else {storageBlocked=true; toast('다른 창의 데이터를 확인할 수 없어 저장을 중지했어요.');} });

@@ -1,4 +1,4 @@
-import { getPeriod, todayISO } from './domain.js';
+import { getPeriod, todayISO, activeEntries } from './domain.js';
 
 const won = n => `${new Intl.NumberFormat('ko-KR').format(n)}원`;
 export function shiftMonth(month, delta) {
@@ -11,6 +11,7 @@ export function calendarModel(month, entries, period) {
   const count = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
   const totals = new Map();
   for (const entry of entries) {
+    if (entry.deletedAt) continue;
     if (!entry.date.startsWith(month)) continue;
     if (!totals.has(entry.date)) totals.set(entry.date, { expense: 0, income: 0 });
     if (entry.type === 'expense' || entry.type === 'income') totals.get(entry.date)[entry.type] += entry.amount;
@@ -21,7 +22,7 @@ export function calendarModel(month, entries, period) {
   }) };
 }
 
-export function createHistory({ getState, onRecord, onOpenSheet }) {
+export function createHistory({ getState, onRecord, onEdit, onOpenSheet }) {
   const $ = selector => document.querySelector(selector);
   let month = todayISO().slice(0, 7), selectedDate = null;
   function render() {
@@ -30,7 +31,7 @@ export function createHistory({ getState, onRecord, onOpenSheet }) {
     const model = calendarModel(month, state.entries, period);
     $('#calendar-month').textContent = `${Number(month.slice(0, 4))}년 ${Number(month.slice(5))}월`;
     $('#calendar-period').textContent = `현재 예산 기간 ${period.start} ~ ${period.end}`;
-    const periodEntries = state.entries.filter(e => e.date >= period.start && e.date <= period.end && e.date <= todayISO());
+    const periodEntries = activeEntries(state).filter(e => e.date >= period.start && e.date <= period.end && e.date <= todayISO());
     for (const type of ['expense', 'income']) $('#history-' + type).textContent = won(periodEntries.filter(e => e.type === type).reduce((sum, e) => sum + e.amount, 0));
     const grid = $('#calendar-days'); grid.replaceChildren();
     for (let i = 0; i < model.offset; i++) {
@@ -60,27 +61,34 @@ export function createHistory({ getState, onRecord, onOpenSheet }) {
     return `${new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 1 }).format(amount / unit)}${unit === 10000 ? '만' : '억'}`;
   }
   function renderDay() {
-    const entries = getState().entries.filter(e => e.date === selectedDate).slice().reverse();
+    const entries = activeEntries(getState()).filter(e => e.date === selectedDate).slice().reverse();
     $('#day-title').textContent = new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', weekday: 'long', timeZone: 'UTC' }).format(new Date(selectedDate + 'T00:00:00Z'));
     $('#day-full-date').textContent = selectedDate;
     for (const type of ['expense', 'income']) $('#day-' + type).textContent = won(entries.filter(e => e.type === type).reduce((sum, e) => sum + e.amount, 0));
     const list = $('#day-entries'); list.replaceChildren();
     $('#day-empty').hidden = entries.length > 0;
     for (const entry of entries) {
-      const row = document.createElement('li'); row.className = `day-entry ${entry.type}`;
+      const row = document.createElement('li');
+      const button = document.createElement('button'); button.type = 'button'; button.className = `day-entry ${entry.type}`;
+      button.setAttribute('aria-label', `${entry.merchant} ${won(entry.amount)} 기록 수정`);
+      button.setAttribute('aria-haspopup', 'dialog');
+      button.addEventListener('click', () => {
+        $('#day-dialog').close();
+        onEdit(entry, selectedDate, $('#calendar-days').querySelector(`[data-date="${selectedDate}"]`));
+      });
       const detail = document.createElement('div'); detail.className = 'entry-detail';
       const title = document.createElement('strong'); title.textContent = entry.merchant;
       const meta = document.createElement('p'); meta.textContent = entry.type === 'transfer' ? '내 계좌 간 이체 · 합계 제외' : entry.type === 'income' ? entry.category || '기타 수입' : entry.category || '미분류';
       detail.append(title, meta);
       if (entry.reason) { const reason = document.createElement('p'); reason.className = 'entry-reason'; reason.textContent = entry.reason; detail.append(reason); }
       const amount = document.createElement('strong'); amount.className = 'entry-amount'; amount.textContent = `${entry.type === 'expense' ? '−' : entry.type === 'income' ? '+' : ''}${won(entry.amount)}`;
-      row.append(detail, amount); list.append(row);
+      button.append(detail, amount); row.append(button); list.append(row);
     }
     $('#record-selected-day').disabled = selectedDate > todayISO();
     $('#future-day-note').hidden = selectedDate <= todayISO();
   }
   function showDay(date) {
-    selectedDate = date; render(); renderDay();
+    selectedDate = date; month = date.slice(0, 7); render(); renderDay();
     onOpenSheet($('#calendar-days').querySelector(`[data-date="${date}"]`));
     if (!$('#day-dialog').open) $('#day-dialog').showModal();
   }

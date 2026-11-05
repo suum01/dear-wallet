@@ -11,9 +11,10 @@ export function getPeriod(date, mode = 'calendar', payday = 25) {
   const start = at(year, startMonth, day), next = at(year, startMonth + 1, day); const end = new Date(next.valueOf() - 86400000);
   return { start: iso(start), end: iso(end), days: Math.round((next - start) / 86400000), daysLeft: Math.round((end - now) / 86400000) + 1, elapsed: Math.round((now - start) / 86400000) + 1 };
 }
+export const activeEntries = state => state.entries.filter(entry => !entry.deletedAt);
 export function summarize(state, date = todayISO()) {
   const period = getPeriod(date, state.settings.periodMode, state.settings.payday);
-  const entries = state.entries.filter(e => e.date >= period.start && e.date <= period.end && e.date <= date);
+  const entries = activeEntries(state).filter(e => e.date >= period.start && e.date <= period.end && e.date <= date);
   const spent = entries.filter(e => e.type === 'expense').reduce((sum,e) => sum + e.amount, 0);
   const income = entries.filter(e => e.type === 'income').reduce((sum,e) => sum + e.amount, 0);
   const budget = state.budgets[period.start] ?? null;
@@ -26,7 +27,7 @@ export function parseState(raw) {
   try {
     const s = JSON.parse(raw); if (s?.version !== 1 || !['calendar','payday'].includes(s.settings?.periodMode) || !Number.isInteger(s.settings.payday) || s.settings.payday < 1 || s.settings.payday > 31 || !Array.isArray(s.entries) || !Array.isArray(s.fixedCosts) || !s.budgets || typeof s.budgets !== 'object' || Array.isArray(s.budgets) || !Array.isArray(s.bookmarks)) return null;
     if (!Object.entries(s.budgets).every(([key,value]) => validDate(key) && validAmount(value))) return null;
-    if (!s.entries.every(e => typeof e.id === 'string' && ['expense','income','transfer'].includes(e.type) && validAmount(e.amount) && validDate(e.date) && typeof e.merchant === 'string' && typeof e.reason === 'string' && (e.fixedId === null || typeof e.fixedId === 'string'))) return null;
+    if (!s.entries.every(e => typeof e.id === 'string' && ['expense','income','transfer'].includes(e.type) && validAmount(e.amount) && validDate(e.date) && typeof e.merchant === 'string' && typeof e.reason === 'string' && (e.fixedId === null || typeof e.fixedId === 'string') && (e.deletedAt == null || (typeof e.deletedAt === 'string' && Number.isFinite(Date.parse(e.deletedAt)))))) return null;
     if (!s.fixedCosts.every(f => typeof f.id === 'string' && typeof f.name === 'string' && validAmount(f.amount) && Number.isInteger(f.day) && f.day >= 1 && f.day <= 31)) return null;
     if (!s.bookmarks.every(id => Number.isInteger(id) && id >= 0 && id < 7)) return null;
     return s;

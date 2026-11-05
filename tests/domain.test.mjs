@@ -35,3 +35,17 @@ test('restored storage must have valid financial amounts, dates and structure',(
  const s=emptyState();s.entries=[entry('expense',-100)];assert.equal(parseState(JSON.stringify(s)),null);
  assert.equal(validDate('2026-02-30'),false);assert.equal(validAmount(1.5),false);assert.equal(validAmount(100),true);
 });
+
+test('deleted fixed-cost payments no longer count as spending or settle the fixed cost',()=>{
+ const s=emptyState();s.budgets['2026-11-01']=100000;s.fixedCosts=[{id:'phone',name:'통신',amount:10000,day:20}];
+ s.entries=[entry('expense',10000,'2026-11-05',{fixedId:'phone',deletedAt:'2026-11-05T12:00:00Z'}),entry('expense',12000)];
+ let result=summarize(s,'2026-11-05');assert.equal(result.spent,12000);assert.equal(result.unpaidFixed,10000);assert.equal(result.available,78000);
+ delete s.entries[0].deletedAt;
+ result=summarize(s,'2026-11-05');assert.equal(result.spent,22000);assert.equal(result.unpaidFixed,0);assert.equal(result.available,78000);
+ assert.deepEqual(parseState(JSON.stringify(s)),s);
+});
+test('stored deleted records survive reload without reappearing in totals',()=>{
+ const s=emptyState();s.entries=[entry('income',1000,'2026-11-05',{deletedAt:'2026-11-05T12:00:00Z'}),entry('expense',500)];
+ const restored=parseState(JSON.stringify(s));assert.ok(restored);assert.equal(restored.entries.length,2);assert.equal(summarize(restored,'2026-11-05').income,0);
+ s.entries[0].deletedAt='invalid';assert.equal(parseState(JSON.stringify(s)),null);
+});

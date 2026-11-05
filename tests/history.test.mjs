@@ -23,3 +23,10 @@ test('leap year and year navigation produce complete months',()=>{
  assert.equal(calendarModel('2026-02',[],period).days.length,28);
  assert.equal(shiftMonth('2026-01',-1),'2025-12');assert.equal(shiftMonth('2026-12',1),'2027-01');
 });
+
+test('deleted rows remain absent from daily totals after reload',()=>{
+ const model=calendarModel('2026-11',[
+  {date:'2026-11-05',type:'expense',amount:12000,deletedAt:'2026-11-05T12:00:00Z'},
+  {date:'2026-11-05',type:'expense',amount:3000}
+ ],period);assert.equal(model.days[4].expense,3000);
+});
