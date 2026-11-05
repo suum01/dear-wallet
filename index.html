@@ -4,13 +4,13 @@
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#faf9f5"><meta name="description" content="기록은 가볍게, 내 돈의 흐름은 또렷하게. 나에게 맞는 가계부 Dear Wallet.">
   <title>Dear Wallet — 나에게 맞는 가계부</title>
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/src/styles.css">
-  <script type="module" src="/src/app.js"></script>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml"><link rel="manifest" href="./manifest.webmanifest"><link rel="stylesheet" href="./src/styles.css">
+  <script type="module" src="./src/app.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 이동</a>
   <aside class="sidebar">
-    <a class="brand" href="/" aria-label="Dear Wallet 홈"><img src="/favicon.svg" alt="" width="43" height="43"><span>dear wallet<span class="brand-sub">나를 알아가는 작은 기록</span></span></a>
+    <a class="brand" href="./" aria-label="Dear Wallet 홈"><img src="./favicon.svg" alt="" width="43" height="43"><span>dear wallet<span class="brand-sub">나를 알아가는 작은 기록</span></span></a>
     <nav aria-label="주 메뉴" class="desktop-nav">
       <button class="nav-item active" data-nav="home" aria-current="page"><span data-icon="home"></span>홈<span class="nav-dot"></span></button>
       <button class="nav-item" data-nav="history"><span data-icon="calendar"></span>내역</button>
@@ -22,7 +22,7 @@
     <span class="sidebar-footer">A little note to your future self.</span>
   </aside>
   <div class="workspace">
-    <header class="topbar"><span class="breadcrumb">나의 가계부 <span>/</span> <strong>홈</strong></span><a class="mobile-brand" href="/">dear wallet <img src="/favicon.svg" width="28" height="28" alt=""></a><button class="icon-button" data-open="settings" aria-label="설정 열기"><span data-icon="settings"></span></button></header>
+    <header class="topbar"><span class="breadcrumb">나의 가계부 <span>/</span> <strong>홈</strong></span><a class="mobile-brand" href="./">dear wallet <img src="./favicon.svg" width="28" height="28" alt=""></a><button class="icon-button" data-open="settings" aria-label="설정 열기"><span data-icon="settings"></span></button></header>
     <main id="main">
       <div id="demo-banner" class="demo-banner" hidden>샘플 데이터로 둘러보는 중이에요. 실제 기록에는 저장되지 않아요.<button id="exit-demo">둘러보기 끝내기</button></div>
       <div class="undo-notice" data-undo-notice hidden><span>기록을 삭제했어요.</span><button type="button" class="text-button" data-undo>실행 취소</button><button type="button" class="icon-button" data-dismiss-undo aria-label="삭제 취소 안내 닫기">×</button></div>

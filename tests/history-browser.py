@@ -2,6 +2,8 @@
 import json
 import os
 from pathlib import Path
+BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:3000/").rstrip("/") + "/"
+
 from playwright.sync_api import sync_playwright
 
 with sync_playwright() as p:
@@ -9,7 +11,7 @@ with sync_playwright() as p:
     page=browser.new_page(viewport={'width':390,'height':844})
     errors=[]
     page.on('pageerror',lambda error:errors.append(str(error)))
-    page.goto('http://127.0.0.1:3000')
+    page.goto(BASE_URL)
     date=page.evaluate("new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())")
     previous=date[:8]+'01'
     page.locator('.bottom-nav [data-nav=history]').click()
@@ -76,7 +78,7 @@ with sync_playwright() as p:
     page.keyboard.press('Escape')
     # Empty state in a completely separate browser context must not inherit test records.
     clean=browser.new_page(viewport={'width':320,'height':812})
-    clean.goto('http://127.0.0.1:3000/#history')
+    clean.goto(BASE_URL + '#history')
     assert clean.locator('#history-expense').inner_text()=='0원'
     assert not errors, errors
     print(json.dumps({'status':'passed','viewports':[320,375,390,430,768,1024,1440],'checks':['calendar totals','internal transfers excluded','third-party spending','date prefill','sheet reopens after save','month navigation','reload','browser back','future dates','keyboard focus','empty state'],'errors':errors}))

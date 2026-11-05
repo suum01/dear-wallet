@@ -2,6 +2,8 @@
 import json
 import os
 from pathlib import Path
+BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:3000/").rstrip("/") + "/"
+
 from playwright.sync_api import sync_playwright, expect
 
 with sync_playwright() as p:
@@ -10,14 +12,14 @@ with sync_playwright() as p:
     page=context.new_page()
     errors=[]
     page.on('pageerror',lambda error:errors.append(str(error)))
-    page.goto('http://127.0.0.1:3000')
+    page.goto(BASE_URL)
     date=page.evaluate("new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())")
     start=date[:8]+'01'
     def entry(id,type,amount,merchant,fixedId=None):
         return dict(id=id,type=type,amount=amount,merchant=merchant,fixedId=fixedId,date=date,reason='',category='식비' if type=='expense' else '기타 수입')
     state={'version':1,'settings':{'periodMode':'calendar','payday':25},'budgets':{start:100000},'fixedCosts':[{'id':'phone','name':'통신','amount':10000,'day':20}],'bookmarks':[], 'entries':[entry('food','expense',12000,'점심'),entry('phone','expense',10000,'통신비','phone')]}
     page.evaluate('(state)=>localStorage.setItem("dear-wallet.v1",JSON.stringify(state))',state)
-    page.goto('http://127.0.0.1:3000/#history')
+    page.goto(BASE_URL + '#history')
     page.reload()
     page.locator(f'[data-date="{date}"]').click()
     form=page.locator('#record-form')
@@ -80,7 +82,7 @@ with sync_playwright() as p:
         page.screenshot(path=f'artifacts/edit-{width}.png',full_page=True)
         page.locator('#cancel-delete').click()
     # A second tab updates the record; the stale editor must not overwrite it.
-    other=page.context.new_page();other.goto('http://127.0.0.1:3000')
+    other=page.context.new_page();other.goto(BASE_URL)
     other.evaluate('()=>{let s=JSON.parse(localStorage.getItem("dear-wallet.v1"));s.entries.find(e=>e.id==="phone").amount=11000;localStorage.setItem("dear-wallet.v1",JSON.stringify(s));}')
     expect(page.locator('#spent')).to_have_text('11,000원')
     form.get_by_role('button',name='수정 저장하기').click()

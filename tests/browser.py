@@ -4,6 +4,8 @@ Uses system Chromium; run npm start first. Screenshots go to ignored artifacts/.
 import json
 import os
 from pathlib import Path
+BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:3000/").rstrip("/") + "/"
+
 from playwright.sync_api import sync_playwright
 
 with sync_playwright() as p:
@@ -11,7 +13,7 @@ with sync_playwright() as p:
     page = browser.new_page(viewport={"width": 1440, "height": 1100}, device_scale_factor=1)
     errors = []
     page.on('pageerror', lambda error: errors.append(str(error)))
-    page.goto('http://127.0.0.1:3000')
+    page.goto(BASE_URL)
     page.locator('#home-view h1').wait_for()
     assert page.locator('#ring-value').inner_text() == '0원'
     assert page.locator('#ring-progress').evaluate('(el) => el.style.strokeDashoffset') == '0'

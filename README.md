@@ -14,7 +14,7 @@ Node.js 22 이상(검증: 24.22.1).
 npm start
 ```
 
-기본 포트는 3000이며 `PORT=3001 npm start`로 변경할 수 있습니다. 정적 호스팅 시 `index.html`, `src/`, `favicon.svg`, `manifest.webmanifest`를 함께 배포합니다. 경로는 도메인 루트 기준입니다. 서버는 개발용이며 공개 서비스의 인증·데이터 서버가 아닙니다.
+기본 포트는 3000이며 `PORT=3001 npm start`로 변경할 수 있습니다. 정적 호스팅 시 `npm run build`로 생성된 `dist/`만 배포합니다. 상대 경로를 사용하므로 도메인 루트와 `/dear-wallet/` 같은 프로젝트 경로를 모두 지원합니다. 서버는 개발용이며 공개 서비스의 인증·데이터 서버가 아닙니다.
 
 ## 구현한 것
 
@@ -66,3 +66,35 @@ python tests/edit-browser.py
 날짜별 목록의 기록을 누르면 기존 값이 채워진 수정창이 열립니다. 닫기/Escape는 저장하지 않고 원래 목록으로 돌아갑니다. 날짜를 바꿔 저장하면 변경된 날짜의 달력과 목록으로 이동합니다. 분류 수정은 해당 기록에만 적용하며 자동 분류 규칙은 아직 생성하지 않습니다.
 
 삭제는 확인 후 처리하고 행에 삭제 시각을 남깁니다. 삭제한 기록은 홈·달력·목록·고정비 결제 계산에서 모두 제외됩니다. 마지막 삭제 하나를 안내창의 실행 취소로 복원할 수 있습니다. 안내를 닫거나 페이지를 새로고침하거나 샘플 모드로 전환하면 실행 취소 기회는 끝나며, 영구 휴지통 UI는 아직 없습니다. 내보낸 JSON에는 삭제 표시가 있는 원본도 포함됩니다. 다른 창에서 바뀐 기록을 편집 중인 경우에는 덮어쓰지 않고 다시 열도록 안내합니다.
+
+## GitHub Pages 배포
+
+`.github/workflows/pages.yml`은 main 푸시 또는 수동 실행 시 검사 → 테스트 → 공개 파일 빌드 → Pages 배포를 수행합니다. 별도 패키지 설치나 개인 토큰은 필요 없으며, Actions의 기본 `GITHUB_TOKEN`과 Pages 배포 권한을 사용합니다.
+
+### 최초 한 번 설정
+
+1. [저장소 Settings → Pages](https://github.com/suum01/dear-wallet/settings/pages)를 엽니다.
+2. **Build and deployment → Source → GitHub Actions**를 선택합니다.
+3. [Actions의 Deploy Dear Wallet to GitHub Pages](https://github.com/suum01/dear-wallet/actions/workflows/pages.yml)에서 **Run workflow → main → Run workflow**를 실행합니다. 이미 실행 중이면 완료를 기다립니다.
+4. build와 deploy가 모두 성공하면 deploy 작업의 `github-pages` 링크로 접속합니다.
+
+기본 예상 주소는 **https://suum01.github.io/dear-wallet/** 입니다. 이 주소는 Pages 활성화와 배포 성공 후에만 접속할 수 있습니다. 최초 설정 전에 실행한 워크플로가 실패했다면 설정 후 다시 실행합니다. 이후에는 main에 올릴 때마다 자동 갱신됩니다.
+
+### 배포 결과 로컬 검증
+
+```sh
+npm run check
+npm test
+npm run build
+npm run preview
+```
+
+preview는 기본적으로 `/dear-wallet/` 경로, 4173 포트에서 `dist/`를 제공합니다. 루트 배포 검증은 `BASE_PATH=/ npm run preview`를 사용합니다. `BASE_URL`을 지정하면 기존 브라우저 테스트도 배포 경로에서 실행할 수 있습니다.
+
+```sh
+BASE_URL=http://127.0.0.1:4173/dear-wallet/ python tests/browser.py
+BASE_URL=http://127.0.0.1:4173/dear-wallet/ python tests/history-browser.py
+BASE_URL=http://127.0.0.1:4173/dear-wallet/ python tests/edit-browser.py
+```
+
+배포 파일에는 웹 화면용 HTML·CSS·JavaScript·아이콘·매니페스트만 포함됩니다. 로컬 기록, 내보낸 JSON, 테스트 결과, 문서, 환경변수 파일은 포함하지 않습니다. 기존 개발 주소에 저장된 기록은 새 배포 주소로 자동 이동하지 않습니다. 배포 후에도 기기별 브라우저 저장이며 구글 시트 동기화는 아직 연결되지 않았습니다.

@@ -3,11 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "node scripts/serve.mjs",
     "start": "node scripts/serve.mjs",
     "test": "node --test --test-isolation=none tests/*.test.mjs",
-    "check": "node --check src/app.js && node --check src/domain.js && node --check src/history.js && node --check scripts/serve.mjs"
+    "check": "node --check src/app.js && node --check src/domain.js && node --check src/history.js && node --check scripts/serve.mjs && node --check scripts/build.mjs && node --check scripts/preview.mjs",
+    "build": "node scripts/build.mjs",
+    "preview": "node scripts/preview.mjs"
   }
 }
