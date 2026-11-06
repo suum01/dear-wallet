@@ -1,4 +1,5 @@
 import { ruleKey, setRule } from './category-rules.js';
+import { customCategoryKey, setCustomCategory } from './category-catalog.js';
 import { emptyState, parseState, validDate, validAmount } from './domain.js';
 
 export const TABLES = {
@@ -38,6 +39,8 @@ export function stateDiff(base, next) {
   if (!!base.settings.aiCategorization !== !!next.settings.aiCategorization) patches.push({table:'settings',key:'aiCategorization',value:!!next.settings.aiCategorization});
   const beforeRules=base.settings.categoryRules || [],afterRules=next.settings.categoryRules || [];
   for(const key of new Set([...beforeRules.map(ruleKey),...afterRules.map(ruleKey)])){const previous=beforeRules.find(rule=>ruleKey(rule)===key),value=afterRules.find(rule=>ruleKey(rule)===key);if(!SAME(previous,value))patches.push({table:'settings',key,value:value?clone(value):null});}
+  const beforeCategories=base.settings.customCategories || [],afterCategories=next.settings.customCategories || [];
+  for(const key of new Set([...beforeCategories.map(customCategoryKey),...afterCategories.map(customCategoryKey)])){const previous=beforeCategories.find(category=>customCategoryKey(category)===key),value=afterCategories.find(category=>customCategoryKey(category)===key);if(!SAME(previous,value))patches.push({table:'settings',key,value:value?clone(value):null});}
   if (!SAME(base.bookmarks,next.bookmarks)) patches.push({table:'settings',key:'bookmarks',value:clone(next.bookmarks)});
   return patches;
 }
@@ -49,7 +52,7 @@ export function applyPatches(base, patches) {
       if (index === -1) result.entries.push(clone(p.value)); else result.entries[index] = clone(p.value);
     } else if (p.table === 'budgets') { if (p.value === null) delete result.budgets[p.key]; else result.budgets[p.key] = p.value; }
     else if (p.table === 'fixedCosts') { result.fixedCosts = result.fixedCosts.filter(f => f.id !== p.key); if (p.value !== null) result.fixedCosts.push(clone(p.value)); }
-    else if (p.table === 'settings') { if (p.key === 'bookmarks') result.bookmarks = clone(p.value); else if(p.key.startsWith('categoryRule:'))setRule(result,p.key,p.value);else result.settings[p.key] = p.value; }
+    else if (p.table === 'settings') { if (p.key === 'bookmarks') result.bookmarks = clone(p.value); else if(p.key.startsWith('categoryRule:'))setRule(result,p.key,p.value);else if(p.key.startsWith('customCategory:'))setCustomCategory(result,p.key,p.value);else result.settings[p.key] = p.value; }
   }
   return result;
 }
@@ -61,6 +64,7 @@ export function mergeForConnection(remote, local) {
   for (const [key,value] of Object.entries(local.budgets)) if (!(key in result.budgets)) result.budgets[key] = value;
   for (const cost of local.fixedCosts) if (!result.fixedCosts.some(f => f.id === cost.id)) result.fixedCosts.push(clone(cost));
   const rules=clone(remote.settings.categoryRules || []);for(const rule of local.settings.categoryRules || [])if(!rules.some(saved=>ruleKey(saved)===ruleKey(rule)))rules.push(clone(rule));if(rules.length)result.settings.categoryRules=rules;
+  const categories=clone(remote.settings.customCategories || []);for(const category of local.settings.customCategories || [])if(!categories.some(saved=>customCategoryKey(saved)===customCategoryKey(category)))categories.push(clone(category));if(categories.length)result.settings.customCategories=categories;
   result.bookmarks = [...new Set([...remote.bookmarks,...local.bookmarks])];
   return result;
 }
@@ -100,9 +104,9 @@ export function decodeTables(tables) {
       } else if (key === 'settings') {
         const [name,encoded,updatedAt] = row;
         if (!timestamp(updatedAt)) fail(table.title);
-        if (!['periodMode','payday','bookmarks','aiCategorization'].includes(name) && !String(name).startsWith('categoryRule:')) continue;
+        if (!['periodMode','payday','bookmarks','aiCategorization'].includes(name) && !String(name).startsWith('categoryRule:') && !String(name).startsWith('customCategory:')) continue;
         let value; try { value = JSON.parse(encoded); } catch { fail(table.title); }
-        if (name === 'bookmarks') state.bookmarks = value;else if(name.startsWith('categoryRule:'))setRule(state,name,value);else state.settings[name] = value;
+        if (name === 'bookmarks') state.bookmarks = value;else if(name.startsWith('categoryRule:'))setRule(state,name,value);else if(name.startsWith('customCategory:'))setCustomCategory(state,name,value);else state.settings[name] = value;
       }
     }
   }

@@ -10,7 +10,7 @@ const dist = path.join(root, 'dist');
 const sources = (await readdir(path.join(root, 'src'), { withFileTypes: true }))
   .filter(file => file.isFile() && /\.(js|css)$/.test(file.name) && file.name!=='firebase-provider.js')
   .map(file => `src/${file.name}`);
-const files = ['index.html', 'favicon.svg', 'manifest.webmanifest', ...sources];
+const files = ['index.html', 'favicon.svg', 'wallet-mascot.svg', 'manifest.webmanifest', ...sources];
 const html = await readFile(path.join(root, 'index.html'), 'utf8');
 if (/\b(?:src|href)=["']\/(?!\/)/.test(html)) throw new Error('Use relative asset URLs for project-site hosting.');
 await rm(dist, { recursive: true, force: true });

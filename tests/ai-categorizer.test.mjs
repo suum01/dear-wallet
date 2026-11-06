@@ -20,6 +20,21 @@ test('AI output is constrained to the existing categories and explicitly marked 
   assert.throws(()=>aiResult({category:'새로운 카테고리'},'expense'));
   assert.throws(()=>aiResult('not JSON','expense'));
 });
+test('an unknown category must be a suggestion and can never be silently chosen',()=>{
+ const result=aiResult({category:'미분류',suggestedCategory:'반려동물',suggestionReason:'반려동물의 사료와 용품을 모아 볼 수 있어요.'},'expense');
+ assert.equal(result.category,'미분류');assert.equal(result.suggestedCategory,'반려동물');
+ assert.throws(()=>aiResult({category:'반려동물'},'expense'));
+ assert.throws(()=>aiResult({category:'식비',suggestedCategory:'반려동물'},'expense'));
+ assert.throws(()=>aiResult({category:'미분류',suggestedCategory:'급여'},'expense'));
+ assert.throws(()=>aiResult({category:'미분류',suggestedCategory:'<script>alert(1)</script>'},'expense'));
+ assert.throws(()=>aiResult({category:'미분류',suggestedCategory:'가'.repeat(41)},'expense'));
+});
+test('confirmed categories are usable by AI and equivalent names never prompt duplicate additions',()=>{
+ assert.equal(aiResult({category:'반려동물'},'expense',['반려동물']).category,'반려동물');
+ const duplicate=aiResult({category:'미분류',suggestedCategory:'반려 동물'},'expense',['반려동물']);assert.equal(duplicate.category,'반려동물');assert.equal(duplicate.suggestedCategory,undefined);
+ assert.equal(aiResult({category:'미분류',suggestedCategory:'식 비'},'expense').category,'식비');
+ assert.deepEqual(aiInput({...input,customCategories:['반려동물'],reason:'private'}),{...input,customCategories:['반려동물']});
+});
 test('editing rapidly is debounced into one request and re-rendering never repeats it',async()=>{
   const calls=[];const live=createLiveClassifier({debounceMs:10,request:async value=>{calls.push(value);return {category:'식비'};}});
   live.schedule({...input,description:'반'});live.schedule(input);live.schedule(input);
@@ -54,7 +69,7 @@ test('timeouts and invalid model output allow a retry instead of saving an unval
   assert.match(aiError(new Error('429 RESOURCE_EXHAUSTED')),/사용 한도/);
   assert.match(aiError(new Error('403 PERMISSION_DENIED')),/권한/);
 });
-test('AI source and opt-in roundtrip through existing settings and Sheets without changing totals',()=>{
+test('AI source and legacy preference roundtrip through Sheets without changing totals',()=>{
   const before=emptyState(),state=structuredClone(before);state.settings.aiCategorization=true;
   state.entries.push({id:'ai',date:'2026-11-06',type:'expense',amount:1000,merchant:'씨유',description:'반숙란',category:'식비',categorySource:'ai',reason:'',fixedId:null});
   assert.ok(parseState(JSON.stringify(state)));assert.equal(summarize(state,'2026-11-06').spent,1000);

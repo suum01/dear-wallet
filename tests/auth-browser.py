@@ -75,7 +75,7 @@ with sync_playwright() as p:
  page.locator('.topbar [data-open=settings]').click();page.locator('#session-sign-out').click();page.evaluate("window.testSkipAuthEvent=true;window.testNextUser='alice'");page.locator('#google-sign-in').click();expect(page.locator('#app-shell')).to_be_visible();expect(page.locator('#spent')).to_have_text('10,000원')
  slow_context=browser.new_context(viewport={'width':390,'height':844});setup(slow_context)
  slow_context.route('**/src/firebase-provider.js',lambda route:route.fulfill(content_type='text/javascript',body=PROVIDER.replace('let callback;','await new Promise(resolve=>setTimeout(resolve,700));let callback;')))
- slow=slow_context.new_page();slow.goto(BASE_URL);slow.locator('#legacy-entry').click();expect(slow.locator('#app-shell')).to_be_visible();slow.wait_for_timeout(1000);expect(slow.locator('#app-shell')).to_be_visible();expect(slow.locator('#login-view')).to_be_hidden()
+ slow=slow_context.new_page();slow.goto(BASE_URL);slow.locator('#loading-legacy-entry').click();expect(slow.locator('#app-shell')).to_be_visible();slow.wait_for_timeout(1000);expect(slow.locator('#app-shell')).to_be_visible();expect(slow.locator('#login-view')).to_be_hidden()
  assert not errors,errors
  print(json.dumps({'status':'passed','authentication':'simulated Firebase adapter; no real Google account used','checks':['unconfigured state','demo and return','login cancel','popup blocked','login to home','session restoration','logout','account isolation','account save','first-login onboarding to home','cloud denial keeps home hidden','retry','sign-in result without duplicate auth event','late SDK initialization preserves local mode'],'viewports':[320,375,390,430,768,1024,1440]}))
  browser.close()

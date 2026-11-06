@@ -23,7 +23,7 @@ export async function createFirebaseProvider(config) {
       const input=aiInput(raw);
       const model=getGenerativeModel(getAI(app,{backend:new GoogleAIBackend()}),{
         model:AI_MODEL,systemInstruction:AI_INSTRUCTIONS,
-        generationConfig:{responseMimeType:'application/json',responseSchema:Schema.object({properties:{category:Schema.enumString({enum:aiCategories(input.type)})}}),maxOutputTokens:128}
+        generationConfig:{responseMimeType:'application/json',responseSchema:Schema.object({properties:{category:Schema.enumString({enum:aiCategories(input.type,input.customCategories)}),suggestedCategory:Schema.string(),suggestionReason:Schema.string()}}),maxOutputTokens:384}
       },{timeout:12000});
       const result=await model.generateContent(JSON.stringify(input));
       return result.response.text();
