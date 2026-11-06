@@ -17,6 +17,8 @@ with sync_playwright() as p:
  def rules():return page.evaluate('JSON.parse(localStorage.getItem("dear-wallet.v1")).settings.categoryRules || []')
  def entries():return page.evaluate('JSON.parse(localStorage.getItem("dear-wallet.v1")).entries')
  open_record('스타벅스 강남점');expect(form.locator('[name=category]')).to_have_value('카페');save();assert entries()[-1]['categorySource']=='keyword'
+ open_record('(주) 쏘카');expect(form.locator('[name=category]')).to_have_value('교통');form.locator('[data-close]').click()
+ open_record('친구에게 송금','카셰어링 이용료');expect(form.locator('[name=category]')).to_have_value('교통');form.locator('[data-close]').click()
  open_record('CU','치약과 세제');expect(form.locator('[name=category]')).to_have_value('생활용품');form.locator('[name=reason]').fill('여행 준비');save();assert entries()[-1]['description']=='치약과 세제';assert entries()[-1]['reason']=='여행 준비'
  # A one-off correction does not silently teach a rule.
  open_record('CU');expect(form.locator('[name=category]')).to_have_value('미분류');form.locator('[name=category]').fill('여행 준비');expect(page.locator('#remember-category-panel')).to_be_visible();save();assert rules()==[]

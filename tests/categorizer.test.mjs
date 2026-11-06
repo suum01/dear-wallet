@@ -11,6 +11,18 @@ const input=(merchant,description='',type='expense')=>({merchant,description,typ
 for(const [merchant,description,category] of [
  ['스타벅스 강남점','','카페'],['STARBUCKS GANGNAM','','카페'],['김밥천국','','식비'],['메가 커피','','카페'],['CU 강남점','삼각김밥과 우유','식비'],['CU 강남점','치약과 세제','생활용품'],['쿠팡','휴지','생활용품'],['쿠팡','운동화','쇼핑'],['쿠팡','생수','식비'],['카카오T','','교통'],['서울병원','주차비','교통'],['서울의원','감기 진료','의료'],['교보문고','','교육'],['스타벅스','커피머신 구입','쇼핑'],['모르는 곳','월세','주거'],['모르는 곳','휴대폰 요금','통신'],['모르는 곳','친구 결혼식 축의금','경조사'],['CGV 강남','','문화'],['친구에게 송금','저녁 식사 정산','식비']
 ])test(`categorize ${merchant} / ${description || '(no content)'} as ${category}`,()=>assert.equal(classify(input(merchant,description)).category,category));
+test('recognize car sharing and rental aliases in either merchant or content',()=>{
+ for(const merchant of ['쏘카','(주) 쏘카','쏘카 강남역','ＳＯＣＡＲ','SOCAR 예약','그린카','GreenCar','롯데렌터카','SK 렌트카'])assert.equal(classify(input(merchant)).category,'교통',merchant);
+ for(const description of ['쏘카 이용','socar 이용료','그린카 이용료','카셰어링','카쉐어링','렌터카','렌트카','차량 대여','자동차 대여'])assert.equal(classify(input('친구에게 송금',description)).category,'교통',description);
+});
+test('car rental recognition preserves purpose, personal rules and transaction type',()=>{
+ assert.equal(classify(input('쏘카','저녁 식사 정산')).category,'식비');
+ assert.equal(classify(input('쏘카','렌터카와 저녁 식사')).category,'미분류');
+ assert.equal(classify({...input('쏘카'),rules:[learned('쏘카','출장')]}).category,'출장');
+ assert.equal(classify(input('쏘카','쏘카 환불','income')).category,'기타 수입');
+ assert.equal(classify(input('쏘카','','transfer')).category,'내부 이체');
+ assert.equal(classify(input('의상실','의상 대여')).category,'미분류');
+});
 for(const merchant of ['CU','GS25','쿠팡','다이소','네이버쇼핑','모르는 가게','culture club'])test(`do not guess from ambiguous merchant ${merchant}`,()=>assert.equal(classify(input(merchant)).category,'미분류'));
 test('mixed-purpose purchases remain unclassified, including specific products',()=>{
  assert.equal(classify(input('이마트','우유랑 샴푸')).category,'미분류');assert.equal(classify(input('쿠팡','커피머신과 치약')).category,'미분류');

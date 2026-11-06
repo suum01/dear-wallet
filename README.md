@@ -120,3 +120,5 @@ BASE_URL=http://127.0.0.1:4173/dear-wallet/ python tests/edit-browser.py
 사용처와 선택적인 내용을 입력하면 카테고리가 바로 채워집니다. 예: 스타벅스 → 카페, CU / 치약과 세제 → 생활용품, 쿠팡 / 생수 → 식비. 추가 AI API 요금 없이 기기 안에서 판단하며, 알 수 없거나 여러 용도가 섞인 기록은 미분류로 남깁니다.
 
 [직접 수정·기억·동기화·검증 범위](docs/categorization.md)를 참고하세요. `tests/category-browser.py`로 입력부터 분류 저장·기억 해제까지 확인할 수 있습니다.
+
+[가계부 5개 앱의 카테고리 조사와 분류 확장 제안](docs/category-research.md)에는 공식 출처, 기본값·샘플·권장안의 차이, 쏘카 미분류 수정 범위를 정리했습니다.
