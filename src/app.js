@@ -1,6 +1,8 @@
+import { mountSheetSync } from './sheet-sync.js';
 import { createHistory } from './history.js';
 import { emptyState, parseState, summarize, todayISO, validAmount, validDate, getPeriod } from './domain.js';
 const $ = s => document.querySelector(s);
+const sameEntry = (a,b) => a && b && [...new Set([...Object.keys(a),...Object.keys(b)])].filter(key=>key!=='updatedAt').every(key=>a[key]===b[key]);
 const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 const icons = {
  home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/>',
@@ -15,14 +17,15 @@ const icons = {
  bookmark:'<path d="M6 3h12v18l-6-4-6 4Z"/>',lock:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>'
 };
 document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[el.dataset.icon] || ''}</svg>`; });
-const KEY = 'dear-wallet.v1'; let state = emptyState(), storageBlocked = false, demo = null;
-try { const raw = localStorage.getItem(KEY); if (raw !== null) { const loaded = parseState(raw); if (loaded) state = loaded; else storageBlocked = true; } } catch { storageBlocked = true; }
+let sheetUI;
+const KEY = 'dear-wallet.v1'; let state = emptyState(), storageBlocked = false, demo = null, cacheMissing = false;
+try { const raw = localStorage.getItem(KEY); cacheMissing = raw === null; if (raw !== null) { const loaded = parseState(raw); if (loaded) state = loaded; else storageBlocked = true; } } catch { storageBlocked = true; }
 let toastTimer;
 function toast(message) { $('#toast').textContent = message; $('#toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('#toast').classList.remove('visible'), 5000); }
 function persist(next) {
   if (demo) { demo = next; return true; }
   if (storageBlocked) { toast('저장 공간을 사용할 수 없거나 기존 데이터 확인이 필요해요. 기존 기록은 덮어쓰지 않았어요.'); return false; }
-  try { localStorage.setItem(KEY, JSON.stringify(next)); state = next; return true; } catch { toast('저장하지 못했어요. 브라우저 저장 공간과 권한을 확인해주세요.'); return false; }
+  try { localStorage.setItem(KEY, JSON.stringify(next)); state = next; sheetUI?.sync.changed(); return true; } catch { toast('저장하지 못했어요. 브라우저 저장 공간과 권한을 확인해주세요.'); return false; }
 }
 const current = () => demo || state;
 let activeView = 'home', recordReturnDate = null, editingEntry = null, undoDeletion = null;
@@ -69,6 +72,7 @@ function render() {
   $('#demo-banner').hidden = !demo;
   historyUI.render();
   renderUndo();
+  sheetUI?.render();
 }
 function openDialog(name, trigger, entry = null) {
   $(`#${name}-dialog`).returnFocus = trigger;
@@ -92,6 +96,7 @@ function openDialog(name, trigger, entry = null) {
     $('#fixed-rows').replaceChildren(); current().fixedCosts.forEach(addFixedRow);
   }
   if (name === 'settings') {
+    void sheetUI?.prepare();
     $('#settings-form').elements.periodMode.value = current().settings.periodMode;
     $('#settings-form').elements.payday.value = current().settings.payday;
     $('#payday-label').hidden = current().settings.periodMode !== 'payday';
@@ -140,7 +145,7 @@ $('#record-form').addEventListener('submit', e => {
   if (date > todayISO()) { error.textContent = '미래의 거래는 아직 기록할 수 없어요. 예정 지출은 고정비로 등록해주세요.'; return; }
   const next = structuredClone(current());
   const index = editingEntry ? next.entries.findIndex(entry => entry.id === editingEntry.id) : -1;
-  if (editingEntry && (index < 0 || next.entries[index].deletedAt || JSON.stringify(next.entries[index]) !== JSON.stringify(editingEntry))) {
+  if (editingEntry && (index < 0 || next.entries[index].deletedAt || !sameEntry(next.entries[index],editingEntry))) {
     error.textContent = '이 기록이 다른 창에서 변경됐어요. 닫고 다시 열어 최신 내용을 확인해주세요.'; return;
   }
   const category = type === 'transfer' ? '내부 이체' : data.get('category').trim() || (type === 'expense' ? '미분류' : '기타 수입');
@@ -172,7 +177,7 @@ $('#confirm-delete').addEventListener('click', () => {
   if (!editingEntry) return;
   const next = structuredClone(current()); const entry = next.entries.find(entry => entry.id === editingEntry.id);
   const error = $('#record-form .form-error');
-  if (!entry || entry.deletedAt || JSON.stringify(entry) !== JSON.stringify(editingEntry)) { error.textContent = '이 기록이 다른 창에서 변경됐어요. 닫고 다시 열어 최신 내용을 확인해주세요.'; return; }
+  if (!entry || entry.deletedAt || !sameEntry(entry,editingEntry)) { error.textContent = '이 기록이 다른 창에서 변경됐어요. 닫고 다시 열어 최신 내용을 확인해주세요.'; return; }
   const deletedAt = new Date().toISOString(); entry.deletedAt = deletedAt; entry.updatedAt = deletedAt;
   if (!persist(next)) { error.textContent = '삭제하지 못했어요. 기존 기록은 유지했어요.'; return; }
   undoDeletion = { id:entry.id, deletedAt, merchant:entry.merchant, date:entry.date };
@@ -213,13 +218,18 @@ for(let i=1;i<=31;i++) $('#settings-form').elements.payday.add(new Option(`매�
 $('#settings-form').elements.periodMode.addEventListener('change', e => { $('#payday-label').hidden = e.target.value !== 'payday'; });
 $('#settings-form').addEventListener('submit', e => { e.preventDefault(); const next = structuredClone(current()); next.settings = { periodMode:e.currentTarget.elements.periodMode.value, payday:Number(e.currentTarget.elements.payday.value) }; if (!persist(next)) return; $('#settings-dialog').close(); render(); toast('한 달의 기준을 저장했어요.'); });
 $('#start-demo').addEventListener('click', () => {
-  undoDeletion = null; demo = emptyState(); demo.settings = {periodMode:'payday',payday:25}; const p = getPeriod(todayISO(),'payday',25); demo.budgets[p.start] = 1000000;
+  sheetUI?.sync.cancelTimer(); undoDeletion = null; demo = emptyState(); demo.settings = {periodMode:'payday',payday:25}; const p = getPeriod(todayISO(),'payday',25); demo.budgets[p.start] = 1000000;
   demo.fixedCosts = [{id:'sample-fixed',name:'관리비',amount:100000,day:20}]; demo.entries = [{id:'sample',amount:620000,date:todayISO(),merchant:'예시 누적 지출',reason:'홈 둘러보기용 데이터',type:'expense',fixedId:null}]; $('#settings-dialog').close(); render(); toast('샘플 모드예요. 여기서 한 변경은 내 기록에 저장되지 않아요.');
 });
-$('#exit-demo').addEventListener('click', () => { undoDeletion = null; demo = null; render(); toast('내 가계부로 돌아왔어요.'); });
+$('#exit-demo').addEventListener('click', () => { undoDeletion = null; demo = null; render(); sheetUI?.sync.schedule(); toast('내 가계부로 돌아왔어요.'); });
 $('#bookmark-tip').addEventListener('click', () => { const next = structuredClone(current()), id=tipIndex(); next.bookmarks = next.bookmarks.includes(id) ? next.bookmarks.filter(b=>b!==id) : [...next.bookmarks,id]; if (persist(next)) { render(); toast(next.bookmarks.includes(id) ? '상식을 저장했어요. 기록 파일에도 함께 보관돼요.' : '상식 저장을 해제했어요.'); } });
 $('#export-data').addEventListener('click', () => { const blob = new Blob([JSON.stringify(current(), null, 2)],{type:'application/json'}); const url=URL.createObjectURL(blob), link=document.createElement('a'); link.href=url; link.download=`dear-wallet-${todayISO()}${demo?'-sample':''}.json`; link.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); toast('기록 파일을 내려받았어요. 현재 앱에는 파일 복원 기능이 없어요.'); });
 window.addEventListener('storage', e => { if (e.key !== KEY || demo) return; const loaded=e.newValue === null ? emptyState() : parseState(e.newValue); if (loaded) {state=loaded; render();} else {storageBlocked=true; toast('다른 창의 데이터를 확인할 수 없어 저장을 중지했어요.');} });
 let lastDay=todayISO(); setInterval(()=>{if(todayISO()!==lastDay){lastDay=todayISO();render();}},60000);
+sheetUI = mountSheetSync({getLocal:()=>state,isDemo:()=>!!demo,isLocalReady:()=>!storageBlocked,applyLocal:next=>{
+  if(storageBlocked || !parseState(JSON.stringify(next))) throw new Error('브라우저 저장 공간이나 기존 데이터를 확인해주세요. 시트 내용은 덮어쓰지 않았어요.');
+  localStorage.setItem(KEY,JSON.stringify(next)); state=next;
+},onApplied:render,onToast:toast});
+if(cacheMissing && sheetUI.sync.meta && !storageBlocked){try{state=structuredClone(sheetUI.sync.meta.baseline);localStorage.setItem(KEY,JSON.stringify(state));}catch{storageBlocked=true;}}
 navigate(location.hash.slice(1));
 render(); if (storageBlocked) toast('브라우저 저장 공간이나 기존 데이터를 확인해주세요. 기록을 덮어쓰지 않도록 저장을 중지했어요.');
