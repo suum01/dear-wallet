@@ -1,6 +1,8 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, getDocsFromServer, getDocFromServer, writeBatch, serverTimestamp, query, where } from 'firebase/firestore';
+import { getAI, getGenerativeModel, GoogleAIBackend, Schema } from 'firebase/ai';
+import { AI_MODEL, AI_INSTRUCTIONS, aiInput, aiCategories } from './ai-categorizer.js';
 import { emptyState, parseState } from './domain.js';
 import { applyPatches } from './sheets.js';
 
@@ -16,6 +18,16 @@ export async function createFirebaseProvider(config) {
     subscribe(callback,onError){return onAuthStateChanged(auth,callback,onError);},
     signIn(){return signInWithPopup(auth,google);},
     signOut(){cache.clear();return signOut(auth);},
+    async classifyWithAI(raw){
+      if(!auth.currentUser)throw new Error('AI 분류는 Google 로그인 후 사용할 수 있어요.');
+      const input=aiInput(raw);
+      const model=getGenerativeModel(getAI(app,{backend:new GoogleAIBackend()}),{
+        model:AI_MODEL,systemInstruction:AI_INSTRUCTIONS,
+        generationConfig:{responseMimeType:'application/json',responseSchema:Schema.object({properties:{category:Schema.enumString({enum:aiCategories(input.type)})}}),maxOutputTokens:128}
+      },{timeout:12000});
+      const result=await model.generateContent(JSON.stringify(input));
+      return result.response.text();
+    },
     async read(uid){
       const previous=cache.get(uid);
       const source=previous?.cursor?query(wallet(uid),where('savedAt','>=',previous.cursor)):wallet(uid);

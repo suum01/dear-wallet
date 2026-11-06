@@ -85,11 +85,11 @@ export function mountAuthGate({storage,onAccount,onClear,onDemo,onLegacy,onHome}
   window.addEventListener('storage',event=>{if(store && event.key===`dear-wallet.account.${encodeURIComponent(store.uid)}.v1` && mode==='account')void store.sync();});
   for(const button of document.querySelectorAll('[data-login-info]'))button.addEventListener('click',()=>{
     const privacy=button.dataset.loginInfo==='privacy';$('#login-info-title').textContent=privacy?'개인정보 안내':'이용 안내';
-    $('#login-info-body').textContent=privacy?'Google 로그인에는 계정 식별자와 기본 프로필을 사용해요. Google 비밀번호는 이 앱이 받지 않아요. 연결된 계정 기록은 해당 계정으로만 접근하도록 저장하고, 이 기기에도 복사본을 보관해요. 샘플 둘러보기는 실제 계정 기록을 사용하지 않아요.':'개인 지출과 예산을 기록하고 돌아보는 서비스예요. 로그인한 계정의 기록과 이 기기 기존 기록은 자동으로 합치지 않아요. 중요한 기록은 설정에서 파일로 내보내 보관할 수 있어요.';
+    $('#login-info-body').textContent=privacy?'Google 로그인에는 계정 식별자와 기본 프로필을 사용해요. Google 비밀번호는 이 앱이 받지 않아요. 연결된 계정 기록은 해당 계정으로만 접근하도록 저장하고, 이 기기에도 복사본을 보관해요. 샘플 둘러보기는 실제 계정 기록을 사용하지 않아요. AI 자동 분류를 선택하면 사용처·내용·거래 종류를 Google AI에 보내요. 금액·계좌정보·지출 이유·과거 기록은 보내지 않아요.':'개인 지출과 예산을 기록하고 돌아보는 서비스예요. 로그인한 계정의 기록과 이 기기 기존 기록은 자동으로 합치지 않아요. 중요한 기록은 설정에서 파일로 내보내 보관할 수 있어요.';
     $('#login-info-dialog').showModal();
   });
   $('#login-info-dialog [data-close]').addEventListener('click',()=>$('#login-info-dialog').close());
   display('login');void initialize();
   try{if(sessionStorage.getItem('dear-wallet.local-mode')==='legacy')$('#legacy-entry').click();}catch{}
-  return {get mode(){return mode;},get store(){return store;},status,enterDemo,exitDemo,showLogin(){++epoch;onClear();display('login');},showApp(){if(user && store?.initialized)display('account');else display('legacy');}};
+  return {get mode(){return mode;},get store(){return store;},get aiAvailable(){return mode==='account' && typeof provider?.classifyWithAI==='function';},async classifyWithAI(input){if(mode!=='account' || !user || !provider?.classifyWithAI)throw new Error('AI 분류는 Google 로그인 후 사용할 수 있어요.');const request=epoch;const result=await provider.classifyWithAI(input);if(request!==epoch || mode!=='account')throw new Error('로그인 상태가 바뀌었어요.');return result;},status,enterDemo,exitDemo,showLogin(){++epoch;onClear();display('login');},showApp(){if(user && store?.initialized)display('account');else display('legacy');}};
 }

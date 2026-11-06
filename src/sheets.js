@@ -35,6 +35,7 @@ export function stateDiff(base, next) {
     if (!SAME(previous,value)) patches.push({table:'fixedCosts',key,value:value ? clone(value) : null});
   }
   for (const key of ['periodMode','payday']) if (base.settings[key] !== next.settings[key]) patches.push({table:'settings',key,value:next.settings[key]});
+  if (!!base.settings.aiCategorization !== !!next.settings.aiCategorization) patches.push({table:'settings',key:'aiCategorization',value:!!next.settings.aiCategorization});
   const beforeRules=base.settings.categoryRules || [],afterRules=next.settings.categoryRules || [];
   for(const key of new Set([...beforeRules.map(ruleKey),...afterRules.map(ruleKey)])){const previous=beforeRules.find(rule=>ruleKey(rule)===key),value=afterRules.find(rule=>ruleKey(rule)===key);if(!SAME(previous,value))patches.push({table:'settings',key,value:value?clone(value):null});}
   if (!SAME(base.bookmarks,next.bookmarks)) patches.push({table:'settings',key:'bookmarks',value:clone(next.bookmarks)});
@@ -99,7 +100,7 @@ export function decodeTables(tables) {
       } else if (key === 'settings') {
         const [name,encoded,updatedAt] = row;
         if (!timestamp(updatedAt)) fail(table.title);
-        if (!['periodMode','payday','bookmarks'].includes(name) && !String(name).startsWith('categoryRule:')) continue;
+        if (!['periodMode','payday','bookmarks','aiCategorization'].includes(name) && !String(name).startsWith('categoryRule:')) continue;
         let value; try { value = JSON.parse(encoded); } catch { fail(table.title); }
         if (name === 'bookmarks') state.bookmarks = value;else if(name.startsWith('categoryRule:'))setRule(state,name,value);else state.settings[name] = value;
       }

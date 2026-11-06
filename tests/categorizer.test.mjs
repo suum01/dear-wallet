@@ -51,6 +51,12 @@ for(const merchant of ['CU','GS25','쿠팡','다이소','네이버쇼핑','모�
 test('mixed-purpose purchases remain unclassified, including specific products',()=>{
  assert.equal(classify(input('이마트','우유랑 샴푸')).category,'미분류');assert.equal(classify(input('쿠팡','커피머신과 치약')).category,'미분류');
 });
+test('offline fallback understands Korean convenience-store aliases and eggs without guessing the whole shop',()=>{
+ for(const merchant of ['씨유','씨유 역삼점','지에스25','지에스 이십오','세븐일레븐','이마트이십사']){
+  assert.equal(classify(input(merchant,'반숙란')).category,'식비');assert.equal(classify(input(merchant,'치약')).category,'생활용품');
+  assert.equal(classify(input(merchant)).category,'미분류');assert.match(classify(input(merchant)).message,/여러 물건/);
+ }
+});
 test('income and internal transfers respect the explicitly selected transaction type',()=>{
  assert.equal(classify(input('회사','11월 급여','income')).category,'급여');assert.equal(classify(input('은행','이자','income')).category,'이자');assert.equal(classify(input('부모님','용돈','income')).category,'용돈');assert.equal(classify(input('의뢰인','외주 원고료','income')).category,'부수입');assert.equal(classify(input('스타벅스','','transfer')).category,'내부 이체');assert.equal(classify(input('이자카야 환불','','income')).category,'기타 수입');
 });

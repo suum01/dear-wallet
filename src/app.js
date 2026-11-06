@@ -1,5 +1,6 @@
 import { classify, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from './categorizer.js';
 import { merchantKey, findRule, ruleKey, setRule } from './category-rules.js';
+import { createLiveClassifier, aiKey } from './ai-categorizer.js';
 import { mergeForConnection } from './sheets.js';
 import { mountAuthGate } from './auth-gate.js';
 import { mountSheetSync } from './sheet-sync.js';
@@ -23,6 +24,8 @@ const icons = {
 document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[el.dataset.icon] || ''}</svg>`; });
 let sheetUI,authGate,activeAccount,legacyImport=null;
 let categoryMode='auto',pendingForgetKey=null;
+let recordVersion=0;
+const liveAI=createLiveClassifier({request:input=>authGate.classifyWithAI(input),onChange:()=>{if($('#record-dialog').open)refreshCategory();}});
 const KEY = 'dear-wallet.v1'; let state = emptyState(), storageBlocked = false, demo = null, cacheMissing = false;
 try { const raw = localStorage.getItem(KEY); cacheMissing = raw === null; if (raw !== null) { const loaded = parseState(raw); if (loaded) state = loaded; else storageBlocked = true; } } catch { storageBlocked = true; }
 let toastTimer;
@@ -86,6 +89,7 @@ function render() {
 function openDialog(name, trigger, entry = null) {
   $(`#${name}-dialog`).returnFocus = trigger;
   if (name === 'record') {
+    liveAI.cancel();recordVersion++;$('#record-form [type=submit]').disabled=false;
     recordReturnDate = null; editingEntry = entry ? structuredClone(entry) : null;
     $('#record-title').textContent = entry ? '기록을 다듬어요' : '오늘의 작은 기록';
     $('#record-dialog .dialog-description').textContent = entry ? '바뀐 내용은 달력과 예산에 함께 반영돼요.' : '카테고리 고민 없이, 쓴 만큼만 남겨요.';
@@ -112,12 +116,14 @@ function openDialog(name, trigger, entry = null) {
   }
   const dialog = $(`#${name}-dialog`); const error = dialog.querySelector('.form-error'); if (error) error.textContent = '';
   dialog.showModal();
+  if(name==='record')refreshCategory();
 }
 document.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => openDialog(b.dataset.open, b)));
 document.querySelectorAll('dialog').forEach(dialog => {
   dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
   dialog.addEventListener('click', e => { if (e.target === dialog) { const r = dialog.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) dialog.close(); } });
   dialog.addEventListener('close', () => {
+    if(dialog.id==='record-dialog'){liveAI.cancel();recordVersion++;}
     if (dialog.id === 'record-dialog' && recordReturnDate && activeView === 'history') {
       const date = recordReturnDate; recordReturnDate = null; historyUI.showDay(date); return;
     }
@@ -147,8 +153,16 @@ document.querySelectorAll('[data-nav]').forEach(button => button.addEventListene
   if (location.hash !== `#${view}`) location.hash = view; else navigate(view, true);
 }));
 window.addEventListener('hashchange', () => navigate(location.hash.slice(1), true));
-$('#record-form').addEventListener('submit', e => {
-  e.preventDefault(); const form = e.currentTarget, data = new FormData(form); const amount = Number(data.get('amount')), date = data.get('date'), merchant = data.get('merchant').trim(), type = data.get('type');
+$('#record-form').addEventListener('submit', async e => {
+  e.preventDefault(); const form=e.currentTarget,button=form.querySelector('[type=submit]');
+  if(button.disabled)return;
+  if(shouldUseAI()){
+    const version=recordVersion,key=aiKey(recordAIInput());button.disabled=true;
+    try{await liveAI.flush();}finally{if(version===recordVersion)button.disabled=false;}
+    if(version!==recordVersion || !$('#record-dialog').open)return;
+    if(!shouldUseAI() || aiKey(recordAIInput())!==key){form.querySelector('.form-error').textContent='입력 내용이 바뀌었어요. 확인한 뒤 다시 저장해주세요.';return;}
+  }
+  const data = new FormData(form); const amount = Number(data.get('amount')), date = data.get('date'), merchant = data.get('merchant').trim(), type = data.get('type');
   const error = form.querySelector('.form-error');
   if (!validAmount(amount) || !validDate(date) || !merchant) { error.textContent = '금액, 날짜와 사용처를 확인해주세요.'; return; }
   if (date > todayISO()) { error.textContent = '미래의 거래는 아직 기록할 수 없어요. 예정 지출은 고정비로 등록해주세요.'; return; }
@@ -190,21 +204,47 @@ $('#record-form').elements.type.addEventListener('change', () => {
 function categoryPrediction(){
   const form=$('#record-form');
   const rules=(current().settings.categoryRules || []).filter(rule=>ruleKey(rule)!==pendingForgetKey);
-  return classify({merchant:form.elements.merchant.value,description:form.elements.description.value,type:form.elements.type.value,rules});
+  const local=classify({merchant:form.elements.merchant.value,description:form.elements.description.value,type:form.elements.type.value,rules});
+  if(shouldUseAI(local) && liveAI.state.status==='ready' && liveAI.state.key===aiKey(recordAIInput()))return liveAI.state.result;
+  return local;
+}
+function recordAIInput(){const form=$('#record-form');return {merchant:form.elements.merchant.value,description:form.elements.description.value,type:form.elements.type.value};}
+function shouldUseAI(local){
+  const input=recordAIInput();
+  const saved=findRule(current(),input.merchant,input.type);
+  return !!(current().settings.aiCategorization && authGate?.aiAvailable && categoryMode==='auto' && input.type!=='transfer' && input.merchant.trim() && input.merchant.length<=80 && input.description.length<=200 && local?.source!=='merchant-rule' && (!saved || ruleKey(saved)===pendingForgetKey));
+}
+function syncAI(){
+  const type=$('#record-form').elements.type.value,available=!!authGate?.aiAvailable;
+  $('#ai-category-controls').hidden=type==='transfer';$('#ai-category-enabled').disabled=!available;$('#ai-category-enabled').checked=!!current().settings.aiCategorization;
+  $('#ai-category-disclosure').textContent=available?'사용처·내용만 Google AI로 보내요. 금액·계좌정보·지출 이유는 보내지 않아요. 선택은 계정에 저장돼요.':'AI 자동 분류는 Google 로그인 후 사용할 수 있어요.';
+  if(shouldUseAI() && $('#record-dialog').open)liveAI.schedule(recordAIInput());else liveAI.cancel();
 }
 function refreshCategory(){
+  syncAI();
   const form=$('#record-form'),type=form.elements.type.value,prediction=categoryPrediction();
   if(categoryMode==='auto')form.elements.category.value=prediction.category;
   const saved=findRule(current(),form.elements.merchant.value,type);
   $('#category-feedback').hidden=type==='transfer';
-  $('#category-mode-badge').textContent=categoryMode==='manual'?'직접 선택':categoryMode==='existing'?'저장된 분류':prediction.source==='merchant-rule'?'기억한 분류':'자동';
+  const usingAI=shouldUseAI(prediction),pending=usingAI && ['waiting','loading'].includes(liveAI.state.status);
+  $('#category-mode-badge').textContent=categoryMode==='manual'?'직접 선택':categoryMode==='existing'?'저장된 분류':prediction.source==='merchant-rule'?'기억한 분류':prediction.source==='ai'?'AI':usingAI?'임시 분류':'자동';
   $('#category-help').textContent=pendingForgetKey?'저장하면 이 사용처의 기억을 해제해요.':categoryMode==='manual'?'내가 고른 분류로 저장해요.':categoryMode==='existing'?'저장된 분류를 유지해요. 필요하면 자동 분류를 다시 볼 수 있어요.':prediction.message;
+  if(pending)$('#category-help').textContent=liveAI.state.status==='waiting'?'입력을 마치면 AI가 사용처와 내용을 읽고 분류해요.':'AI가 사용처와 내용을 살펴보고 있어요…';
+  else if(usingAI && liveAI.state.status==='error')$('#category-help').textContent=liveAI.state.error;
+  $('#ai-category-retry').hidden=!usingAI || liveAI.state.status!=='error';
   $('#auto-category-reset').hidden=type==='transfer' || categoryMode==='auto';
   $('#forget-category-rule').hidden=!saved || !!pendingForgetKey || type==='transfer';
   const key=merchantKey(form.elements.merchant.value);
   $('#remember-category-panel').hidden=type==='transfer' || categoryMode!=='manual' || !key || key.length>200;
   $('#remember-category-label').textContent=`이 사용처는 다음에도 ‘${form.elements.category.value.trim() || (type==='income'?'기타 수입':'미분류')}’로 기억하기`;
 }
+$('#ai-category-enabled').addEventListener('change',()=>{
+  if(!authGate?.aiAvailable)return;
+  const next=structuredClone(current());next.settings.aiCategorization=$('#ai-category-enabled').checked;
+  if(!persist(next)){$('#ai-category-enabled').checked=!!current().settings.aiCategorization;return;}
+  liveAI.cancel();refreshCategory();
+});
+$('#ai-category-retry').addEventListener('click',()=>{if(shouldUseAI()){liveAI.schedule(recordAIInput(),{retry:true});refreshCategory();}});
 for(const name of ['merchant','description'])$('#record-form').elements[name].addEventListener('input',()=>{
   const originalManual=editingEntry && (editingEntry.categorySource==='manual' || !editingEntry.categorySource && !['미분류','기타 수입',''].includes(editingEntry.category || ''));
   if(categoryMode==='existing')categoryMode=originalManual?'manual':'auto';
@@ -279,6 +319,7 @@ navigate(location.hash.slice(1));
 render(); if (storageBlocked) toast('브라우저 저장 공간이나 기존 데이터를 확인해주세요. 기록을 덮어쓰지 않도록 저장을 중지했어요.');
 
 function clearSessionView(){
+  liveAI.cancel();recordVersion++;
   sheetUI?.sync.cancelTimer();activeAccount=null;demo=null;undoDeletion=null;recordReturnDate=null;editingEntry=null;legacyImport=null;activeView='home';state=emptyState();$('#account-import-preview').hidden=true;
   document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());render();
 }
