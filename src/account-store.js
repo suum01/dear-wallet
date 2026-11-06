@@ -55,7 +55,7 @@ export class AccountStore {
   }
   async finishOnboarding(settings){
     await this.provider.completeOnboarding(this.uid,settings);if(!this.active)return false;
-    const next=structuredClone(this.local);next.settings={...settings};this.cache(next,{...this.baseline,settings:{...settings}});this.onStatus(this);return true;
+    const next=structuredClone(this.local);next.settings={...next.settings,...settings};this.cache(next,{...this.baseline,settings:{...this.baseline.settings,...settings}});this.onStatus(this);return true;
   }
   stop(){this.active=false;clearTimeout(this.timer);}
 }

@@ -45,7 +45,9 @@ with sync_playwright() as p:
      for index,row in enumerate(update['rows']):
       values=[cell.get('userEnteredValue',{}).get('numberValue',cell.get('userEnteredValue',{}).get('stringValue','')) for cell in row['values']]
       while len(table['rows'])<=index:table['rows'].append([])
-      table['rows'][index]=values
+      column=update['start'].get('columnIndex',0)
+      while len(table['rows'][index])<column:table['rows'][index].append('')
+      table['rows'][index][column:column+len(values)]=values
     elif 'appendCells' in op:
      update=op['appendCells'];table=next(v for v in sheets.values() if v['id']==update['sheetId'])
      for row in update['rows']:

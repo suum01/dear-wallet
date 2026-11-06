@@ -1,7 +1,8 @@
+import { ruleKey, setRule } from './category-rules.js';
 import { emptyState, parseState, validDate, validAmount } from './domain.js';
 
 export const TABLES = {
-  entries: { title:'거래내역', headers:['거래ID','거래일','종류','금액','사용처','카테고리','지출이유','고정비ID','수정시각','삭제시각'] },
+  entries: { title:'거래내역', headers:['거래ID','거래일','종류','금액','사용처','카테고리','지출이유','고정비ID','수정시각','삭제시각','내용','분류방식'] },
   budgets: { title:'기간별예산', headers:['기간시작일','예산','수정시각','삭제시각'] },
   allocations: { title:'예산배분', headers:['예산ID','카테고리ID','금액'] },
   fixedCosts: { title:'고정비', headers:['고정비ID','이름','예상금액','매월예정일','수정시각','삭제시각'] },
@@ -34,6 +35,8 @@ export function stateDiff(base, next) {
     if (!SAME(previous,value)) patches.push({table:'fixedCosts',key,value:value ? clone(value) : null});
   }
   for (const key of ['periodMode','payday']) if (base.settings[key] !== next.settings[key]) patches.push({table:'settings',key,value:next.settings[key]});
+  const beforeRules=base.settings.categoryRules || [],afterRules=next.settings.categoryRules || [];
+  for(const key of new Set([...beforeRules.map(ruleKey),...afterRules.map(ruleKey)])){const previous=beforeRules.find(rule=>ruleKey(rule)===key),value=afterRules.find(rule=>ruleKey(rule)===key);if(!SAME(previous,value))patches.push({table:'settings',key,value:value?clone(value):null});}
   if (!SAME(base.bookmarks,next.bookmarks)) patches.push({table:'settings',key:'bookmarks',value:clone(next.bookmarks)});
   return patches;
 }
@@ -45,7 +48,7 @@ export function applyPatches(base, patches) {
       if (index === -1) result.entries.push(clone(p.value)); else result.entries[index] = clone(p.value);
     } else if (p.table === 'budgets') { if (p.value === null) delete result.budgets[p.key]; else result.budgets[p.key] = p.value; }
     else if (p.table === 'fixedCosts') { result.fixedCosts = result.fixedCosts.filter(f => f.id !== p.key); if (p.value !== null) result.fixedCosts.push(clone(p.value)); }
-    else if (p.table === 'settings') { if (p.key === 'bookmarks') result.bookmarks = clone(p.value); else result.settings[p.key] = p.value; }
+    else if (p.table === 'settings') { if (p.key === 'bookmarks') result.bookmarks = clone(p.value); else if(p.key.startsWith('categoryRule:'))setRule(result,p.key,p.value);else result.settings[p.key] = p.value; }
   }
   return result;
 }
@@ -56,11 +59,12 @@ export function mergeForConnection(remote, local) {
   for (const entry of local.entries) if (!result.entries.some(e => e.id === entry.id)) result.entries.push(clone(entry));
   for (const [key,value] of Object.entries(local.budgets)) if (!(key in result.budgets)) result.budgets[key] = value;
   for (const cost of local.fixedCosts) if (!result.fixedCosts.some(f => f.id === cost.id)) result.fixedCosts.push(clone(cost));
+  const rules=clone(remote.settings.categoryRules || []);for(const rule of local.settings.categoryRules || [])if(!rules.some(saved=>ruleKey(saved)===ruleKey(rule)))rules.push(clone(rule));if(rules.length)result.settings.categoryRules=rules;
   result.bookmarks = [...new Set([...remote.bookmarks,...local.bookmarks])];
   return result;
 }
 export function encodePatch(p, time) {
-  if (p.table === 'entries') { const e = p.value; return [e.id,e.date,{expense:'지출',income:'수입',transfer:'내부이체'}[e.type],e.amount,e.merchant,e.category || '',e.reason,e.fixedId || '',e.updatedAt || time,e.deletedAt || '']; }
+  if (p.table === 'entries') { const e = p.value; return [e.id,e.date,{expense:'지출',income:'수입',transfer:'내부이체'}[e.type],e.amount,e.merchant,e.category || '',e.reason,e.fixedId || '',e.updatedAt || time,e.deletedAt || '',e.description || '',e.categorySource || '']; }
   if (p.table === 'budgets') return [p.key,p.value ?? '',time,p.value === null ? time : ''];
   if (p.table === 'fixedCosts') { const f = p.value; return [p.key,f?.name || '',f?.amount ?? '',f?.day ?? '',time,f === null ? time : '']; }
   return [p.key,JSON.stringify(p.value),time];
@@ -71,16 +75,17 @@ export function decodeTables(tables) {
   for (const [key,table] of Object.entries(TABLES)) {
     const rows = tables[key] || [];
     if (!rows.length) continue;
-    if (!SAME(rows[0],table.headers)) fail(table.title);
+    if (!SAME(rows[0],table.headers) && !(key==='entries' && SAME(rows[0],table.headers.slice(0,10)))) fail(table.title);
     for (const raw of rows.slice(1)) {
       if (!raw.some(value => value !== '' && value != null)) continue;
-      if (raw.length > table.headers.length) fail(table.title);
+      if (raw.length > (key==='entries' && rows[0].length===10?10:table.headers.length)) fail(table.title);
       const row = Array.from({length:table.headers.length}, (_,i) => raw[i] ?? '');
       if (key === 'entries') {
-        const [id,date,rawType,amount,merchant,category,reason,fixedId,updatedAt,deletedAt] = row;
+        const [id,date,rawType,amount,merchant,category,reason,fixedId,updatedAt,deletedAt,description,categorySource] = row;
         const type = {지출:'expense',수입:'income',내부이체:'transfer'}[rawType] || rawType;
         if (typeof id !== 'string' || !id || !validDate(date) || !['expense','income','transfer'].includes(type) || !validAmount(amount) || typeof merchant !== 'string' || !merchant.trim() || [category,reason,fixedId].some(v => typeof v !== 'string') || !timestamp(updatedAt) || !timestamp(deletedAt)) fail(table.title);
         const entry = {id,date,type,amount,merchant,category,reason,fixedId:fixedId || null};
+        if(description)entry.description=description;if(categorySource)entry.categorySource=categorySource;
         if (updatedAt) entry.updatedAt = updatedAt; if (deletedAt) entry.deletedAt = deletedAt;
         const index = state.entries.findIndex(e => e.id === id); if (index === -1) state.entries.push(entry); else state.entries[index] = entry;
       } else if (key === 'budgets') {
@@ -94,9 +99,9 @@ export function decodeTables(tables) {
       } else if (key === 'settings') {
         const [name,encoded,updatedAt] = row;
         if (!timestamp(updatedAt)) fail(table.title);
-        if (!['periodMode','payday','bookmarks'].includes(name)) continue;
+        if (!['periodMode','payday','bookmarks'].includes(name) && !String(name).startsWith('categoryRule:')) continue;
         let value; try { value = JSON.parse(encoded); } catch { fail(table.title); }
-        if (name === 'bookmarks') state.bookmarks = value; else state.settings[name] = value;
+        if (name === 'bookmarks') state.bookmarks = value;else if(name.startsWith('categoryRule:'))setRule(state,name,value);else state.settings[name] = value;
       }
     }
   }
@@ -139,6 +144,7 @@ export class GoogleSheets {
       while(usedIds.has(nextId))nextId++;
       ids[key] = existing?.properties.sheetId ?? nextId++; usedIds.add(ids[key]);
       if (!existing) requests.push({addSheet:{properties:{sheetId:ids[key],title:table.title,gridProperties:{frozenRowCount:1}}}});
+      if(key==='entries' && SAME(snapshot.tables[key]?.[0],table.headers.slice(0,10)))requests.push({updateCells:{start:{sheetId:ids[key],rowIndex:0,columnIndex:10},rows:[rowData(table.headers.slice(10))],fields:'userEnteredValue'}});
       if (!(snapshot.tables[key] || []).length) {
         requests.push({updateCells:{start:{sheetId:ids[key],rowIndex:0,columnIndex:0},rows:[{values:table.headers.map(value=>({userEnteredValue:{stringValue:value},userEnteredFormat:{textFormat:{bold:true},backgroundColor:{red:0.98,green:0.93,blue:0.75}}}))}],fields:'userEnteredValue,userEnteredFormat'}});
         if (key === 'categories') requests.push({appendCells:{sheetId:ids[key],rows:defaultCategories.map(rowData),fields:'userEnteredValue'}});

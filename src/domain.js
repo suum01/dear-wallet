@@ -1,3 +1,4 @@
+import { validRules } from './category-rules.js';
 export const MAX_AMOUNT = 999_999_999_999;
 export function validAmount(value) { return Number.isSafeInteger(value) && value > 0 && value <= MAX_AMOUNT; }
 export function validDate(value) { if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false; const d = new Date(value + 'T12:00:00Z'); return Number.isFinite(d.valueOf()) && d.toISOString().slice(0,10) === value; }
@@ -26,8 +27,9 @@ export function emptyState() { return { version: 1, settings: { periodMode: 'cal
 export function parseState(raw) {
   try {
     const s = JSON.parse(raw); if (s?.version !== 1 || !['calendar','payday'].includes(s.settings?.periodMode) || !Number.isInteger(s.settings.payday) || s.settings.payday < 1 || s.settings.payday > 31 || !Array.isArray(s.entries) || !Array.isArray(s.fixedCosts) || !s.budgets || typeof s.budgets !== 'object' || Array.isArray(s.budgets) || !Array.isArray(s.bookmarks)) return null;
+    if (s.settings.categoryRules !== undefined && !validRules(s.settings.categoryRules)) return null;
     if (!Object.entries(s.budgets).every(([key,value]) => validDate(key) && validAmount(value))) return null;
-    if (!s.entries.every(e => typeof e.id === 'string' && ['expense','income','transfer'].includes(e.type) && validAmount(e.amount) && validDate(e.date) && typeof e.merchant === 'string' && typeof e.reason === 'string' && (e.fixedId === null || typeof e.fixedId === 'string') && (e.deletedAt == null || (typeof e.deletedAt === 'string' && Number.isFinite(Date.parse(e.deletedAt)))))) return null;
+    if (!s.entries.every(e => typeof e.id === 'string' && ['expense','income','transfer'].includes(e.type) && validAmount(e.amount) && validDate(e.date) && typeof e.merchant === 'string' && typeof e.reason === 'string' && (e.description === undefined || (typeof e.description === 'string' && e.description.length<=200)) && (e.categorySource === undefined || ['keyword','merchant-rule','manual','unclassified','transfer'].includes(e.categorySource)) && (e.fixedId === null || typeof e.fixedId === 'string') && (e.deletedAt == null || (typeof e.deletedAt === 'string' && Number.isFinite(Date.parse(e.deletedAt)))))) return null;
     if (!s.fixedCosts.every(f => typeof f.id === 'string' && typeof f.name === 'string' && validAmount(f.amount) && Number.isInteger(f.day) && f.day >= 1 && f.day <= 31)) return null;
     if (!s.bookmarks.every(id => Number.isInteger(id) && id >= 0 && id < 7)) return null;
     return s;

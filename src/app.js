@@ -1,3 +1,5 @@
+import { classify, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from './categorizer.js';
+import { merchantKey, findRule, ruleKey, setRule } from './category-rules.js';
 import { mergeForConnection } from './sheets.js';
 import { mountAuthGate } from './auth-gate.js';
 import { mountSheetSync } from './sheet-sync.js';
@@ -20,6 +22,7 @@ const icons = {
 };
 document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[el.dataset.icon] || ''}</svg>`; });
 let sheetUI,authGate,activeAccount,legacyImport=null;
+let categoryMode='auto',pendingForgetKey=null;
 const KEY = 'dear-wallet.v1'; let state = emptyState(), storageBlocked = false, demo = null, cacheMissing = false;
 try { const raw = localStorage.getItem(KEY); cacheMissing = raw === null; if (raw !== null) { const loaded = parseState(raw); if (loaded) state = loaded; else storageBlocked = true; } } catch { storageBlocked = true; }
 let toastTimer;
@@ -78,6 +81,7 @@ function render() {
   renderUndo();
   sheetUI?.render();
   authGate?.status();
+  if($('#record-dialog').open)refreshCategory();
 }
 function openDialog(name, trigger, entry = null) {
   $(`#${name}-dialog`).returnFocus = trigger;
@@ -87,12 +91,12 @@ function openDialog(name, trigger, entry = null) {
     $('#record-dialog .dialog-description').textContent = entry ? '바뀐 내용은 달력과 예산에 함께 반영돼요.' : '카테고리 고민 없이, 쓴 만큼만 남겨요.';
     $('#record-form [type=submit]').textContent = entry ? '수정 저장하기' : '기록 저장하기';
     $('#delete-record').hidden = !entry; $('#delete-confirm').hidden = true;
-    $('#category-label').hidden = !entry;
+    categoryMode=entry?'existing':'auto';pendingForgetKey=null;
     const form = $('#record-form'); form.reset(); form.elements.date.value = todayISO();
     const select = form.elements.fixedId; select.replaceChildren(new Option('아니요', ''));
     current().fixedCosts.forEach(f => select.add(new Option(`${f.name} · ${money(f.amount)}`, f.id)));
     if (entry?.fixedId && !current().fixedCosts.some(cost => cost.id === entry.fixedId)) select.add(new Option('이전에 연결한 고정비 · 현재 목록 없음', entry.fixedId));
-    if (entry) for (const field of ['type', 'amount', 'date', 'merchant', 'reason', 'category', 'fixedId']) form.elements[field].value = entry[field] ?? '';
+    if (entry) for (const field of ['type', 'amount', 'date', 'merchant', 'description', 'reason', 'category', 'fixedId']) form.elements[field].value = entry[field] ?? '';
     updateRecordFields();
   }
   if (name === 'budget') {
@@ -153,29 +157,63 @@ $('#record-form').addEventListener('submit', e => {
   if (editingEntry && (index < 0 || next.entries[index].deletedAt || !sameEntry(next.entries[index],editingEntry))) {
     error.textContent = '이 기록이 다른 창에서 변경됐어요. 닫고 다시 열어 최신 내용을 확인해주세요.'; return;
   }
-  const category = type === 'transfer' ? '내부 이체' : data.get('category').trim() || (type === 'expense' ? '미분류' : '기타 수입');
-  const entry = { ...(editingEntry || {}), id:editingEntry?.id || newId(), amount, date, merchant, type, reason:data.get('reason').trim(), fixedId: type === 'expense' ? data.get('fixedId') || null : null, category, updatedAt:new Date().toISOString() };
+  const prediction=categoryPrediction();
+  const category = type === 'transfer' ? '내부 이체' : categoryMode==='auto'?prediction.category:data.get('category').trim() || (type === 'expense' ? '미분류' : '기타 수입');
+  const categorySource=type==='transfer'?'transfer':categoryMode==='auto'?prediction.source:categoryMode==='existing'?(editingEntry.categorySource || (['미분류','기타 수입'].includes(category)?'unclassified':'manual')):'manual';
+  if(pendingForgetKey)setRule(next,pendingForgetKey,null);
+  const remember=type!=='transfer' && categoryMode==='manual' && data.has('rememberCategory') && merchantKey(merchant) && merchantKey(merchant).length<=200;
+  if(remember){const rule={type,merchantKey:merchantKey(merchant),merchantLabel:merchant,category,updatedAt:new Date().toISOString()};setRule(next,ruleKey(rule),rule);}
+  const entry = { ...(editingEntry || {}), id:editingEntry?.id || newId(), amount, date, merchant, type, description:data.get('description').trim(), reason:data.get('reason').trim(), categorySource, fixedId: type === 'expense' ? data.get('fixedId') || null : null, category, updatedAt:new Date().toISOString() };
   if (editingEntry) next.entries[index] = entry; else next.entries.push(entry);
   if (!persist(next)) { error.textContent = '저장하지 못했어요. 입력한 내용은 유지했으니 브라우저 저장 공간과 권한을 확인해주세요.'; return; }
   const wasEditing = !!editingEntry;
   if (recordReturnDate) recordReturnDate = date;
   $('#record-dialog').close(); render();
   const p = summarize(next).period;
-  toast(wasEditing ? '수정했어요. 달력과 예산에도 반영했어요.' : date < p.start || date > p.end ? '저장했어요. 현재 집계 기간 밖의 기록이에요.' : type === 'transfer' ? '내 계좌 간 이체로 저장했어요. 소비 합계에는 포함하지 않아요.' : type === 'expense' ? '기록했어요! 분류 기능은 준비 중이라 미분류로 보관했어요.' : '수입을 기록했어요. 지출 합계에는 포함하지 않아요.');
+  toast(remember?`${category}로 기록하고, 다음에도 같은 사용처를 기억할게요.`:wasEditing ? '수정했어요. 달력과 예산에도 반영했어요.' : date < p.start || date > p.end ? '저장했어요. 현재 집계 기간 밖의 기록이에요.' : type === 'transfer' ? '내 계좌 간 이체로 저장했어요. 소비 합계에는 포함하지 않아요.' : type === 'expense' ? `${category}로 기록했어요.${category==='미분류'?' 분류는 나중에 바꿔도 돼요.':''}` : `${category}로 수입을 기록했어요. 지출 합계에는 포함하지 않아요.`);
 });
 function updateRecordFields() {
   const form = $('#record-form'), type = form.elements.type.value;
   const expense = type === 'expense';
   $('#fixed-link-label').hidden = !expense || (!current().fixedCosts.length && !editingEntry?.fixedId);
-  $('#category-label').hidden = !editingEntry || type === 'transfer';
-  const suggestions = type === 'income' ? ['급여', '부수입', '용돈', '기타 수입'] : ['미분류', '식비', '카페', '교통', '주거', '생활용품', '쇼핑', '의료', '문화', '기타'];
+  $('#category-label').hidden = type === 'transfer';
+  const suggestions = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
   $('#category-options').replaceChildren(...suggestions.map(value => new Option(value, value)));
+  refreshCategory();
 }
 $('#record-form').elements.type.addEventListener('change', () => {
   const form = $('#record-form'), type = form.elements.type.value;
   form.elements.category.value = editingEntry?.type === type ? editingEntry.category || '' : '';
+  categoryMode=editingEntry?.type===type?'existing':'auto';pendingForgetKey=null;form.elements.rememberCategory.checked=false;
   updateRecordFields();
 });
+function categoryPrediction(){
+  const form=$('#record-form');
+  const rules=(current().settings.categoryRules || []).filter(rule=>ruleKey(rule)!==pendingForgetKey);
+  return classify({merchant:form.elements.merchant.value,description:form.elements.description.value,type:form.elements.type.value,rules});
+}
+function refreshCategory(){
+  const form=$('#record-form'),type=form.elements.type.value,prediction=categoryPrediction();
+  if(categoryMode==='auto')form.elements.category.value=prediction.category;
+  const saved=findRule(current(),form.elements.merchant.value,type);
+  $('#category-feedback').hidden=type==='transfer';
+  $('#category-mode-badge').textContent=categoryMode==='manual'?'직접 선택':categoryMode==='existing'?'저장된 분류':prediction.source==='merchant-rule'?'기억한 분류':'자동';
+  $('#category-help').textContent=pendingForgetKey?'저장하면 이 사용처의 기억을 해제해요.':categoryMode==='manual'?'내가 고른 분류로 저장해요.':categoryMode==='existing'?'저장된 분류를 유지해요. 필요하면 자동 분류를 다시 볼 수 있어요.':prediction.message;
+  $('#auto-category-reset').hidden=type==='transfer' || categoryMode==='auto';
+  $('#forget-category-rule').hidden=!saved || !!pendingForgetKey || type==='transfer';
+  const key=merchantKey(form.elements.merchant.value);
+  $('#remember-category-panel').hidden=type==='transfer' || categoryMode!=='manual' || !key || key.length>200;
+  $('#remember-category-label').textContent=`이 사용처는 다음에도 ‘${form.elements.category.value.trim() || (type==='income'?'기타 수입':'미분류')}’로 기억하기`;
+}
+for(const name of ['merchant','description'])$('#record-form').elements[name].addEventListener('input',()=>{
+  const originalManual=editingEntry && (editingEntry.categorySource==='manual' || !editingEntry.categorySource && !['미분류','기타 수입',''].includes(editingEntry.category || ''));
+  if(categoryMode==='existing')categoryMode=originalManual?'manual':'auto';
+  if(name==='merchant'){$('#record-form').elements.rememberCategory.checked=false;pendingForgetKey=null;}
+  refreshCategory();
+});
+$('#record-form').elements.category.addEventListener('input',()=>{categoryMode='manual';refreshCategory();});
+$('#auto-category-reset').addEventListener('click',()=>{categoryMode='auto';$('#record-form').elements.rememberCategory.checked=false;refreshCategory();});
+$('#forget-category-rule').addEventListener('click',()=>{const form=$('#record-form'),saved=findRule(current(),form.elements.merchant.value,form.elements.type.value);if(saved){pendingForgetKey=ruleKey(saved);categoryMode='auto';form.elements.rememberCategory.checked=false;refreshCategory();}});
 $('#delete-record').addEventListener('click', () => { $('#delete-confirm').hidden = false; $('#cancel-delete').focus(); });
 $('#cancel-delete').addEventListener('click', () => { $('#delete-confirm').hidden = true; $('#delete-record').focus(); });
 $('#confirm-delete').addEventListener('click', () => {
@@ -221,7 +259,7 @@ $('#budget-form').addEventListener('submit', e => {
 });
 for(let i=1;i<=31;i++) $('#settings-form').elements.payday.add(new Option(`매월 ${i}일`,i));
 $('#settings-form').elements.periodMode.addEventListener('change', e => { $('#payday-label').hidden = e.target.value !== 'payday'; });
-$('#settings-form').addEventListener('submit', e => { e.preventDefault(); const next = structuredClone(current()); next.settings = { periodMode:e.currentTarget.elements.periodMode.value, payday:Number(e.currentTarget.elements.payday.value) }; if (!persist(next)) return; $('#settings-dialog').close(); render(); toast('한 달의 기준을 저장했어요.'); });
+$('#settings-form').addEventListener('submit', e => { e.preventDefault(); const next = structuredClone(current()); next.settings = { ...next.settings, periodMode:e.currentTarget.elements.periodMode.value, payday:Number(e.currentTarget.elements.payday.value) }; if (!persist(next)) return; $('#settings-dialog').close(); render(); toast('한 달의 기준을 저장했어요.'); });
 function startDemo() {
   sheetUI?.sync.cancelTimer(); undoDeletion = null; demo = emptyState(); demo.settings = {periodMode:'payday',payday:25}; const p = getPeriod(todayISO(),'payday',25); demo.budgets[p.start] = 1000000;
   demo.fixedCosts = [{id:'sample-fixed',name:'관리비',amount:100000,day:20}]; demo.entries = [{id:'sample',amount:620000,date:todayISO(),merchant:'예시 누적 지출',reason:'홈 둘러보기용 데이터',type:'expense',fixedId:null}]; $('#settings-dialog').close(); render(); toast('샘플 모드예요. 여기서 한 변경은 내 기록에 저장되지 않아요.');

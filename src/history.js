@@ -80,6 +80,7 @@ export function createHistory({ getState, onRecord, onEdit, onOpenSheet }) {
       const title = document.createElement('strong'); title.textContent = entry.merchant;
       const meta = document.createElement('p'); meta.textContent = entry.type === 'transfer' ? '내 계좌 간 이체 · 합계 제외' : entry.type === 'income' ? entry.category || '기타 수입' : entry.category || '미분류';
       detail.append(title, meta);
+      if(entry.description){const description=document.createElement('p');description.className='entry-description';description.textContent=entry.description;detail.append(description);}
       if (entry.reason) { const reason = document.createElement('p'); reason.className = 'entry-reason'; reason.textContent = entry.reason; detail.append(reason); }
       const amount = document.createElement('strong'); amount.className = 'entry-amount'; amount.textContent = `${entry.type === 'expense' ? '−' : entry.type === 'income' ? '+' : ''}${won(entry.amount)}`;
       button.append(detail, amount); row.append(button); list.append(row);
