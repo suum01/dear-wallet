@@ -21,7 +21,7 @@ with sync_playwright() as p:
  browser=p.chromium.launch(executable_path=os.environ.get('CHROMIUM_PATH','/usr/bin/chromium'),args=['--no-sandbox','--disable-dev-shm-usage'])
  errors=[];writes=[];network={'offline':False}
  a_context=browser.new_context(viewport={'width':390,'height':844})
- a=a_context.new_page();a.goto(BASE_URL)
+ a=a_context.new_page();a.goto(BASE_URL);a.locator("#legacy-entry").click()
  date=a.evaluate("new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())")
  sheets={name:{'id':i,'rows':[]} for i,name in enumerate(HEADERS)}
  sheets['거래내역']['rows']=[HEADERS['거래내역'],['remote',date,'지출',5000,'시트에 있던 기록','식비','','','2026-11-01T00:00:00Z','']]
@@ -80,7 +80,7 @@ with sync_playwright() as p:
  assert sheets['개인 메모']['rows']==[['절대 지우면 안 되는 내 메모']]
  # Tokens must never enter local/session storage.
  assert a.evaluate('JSON.stringify({...localStorage,...sessionStorage})').find('browser-test-only')==-1
- b_context=browser.new_context(viewport={'width':1440,'height':1100});b=b_context.new_page();setup(b_context,b);b.goto(BASE_URL)
+ b_context=browser.new_context(viewport={'width':1440,'height':1100});b=b_context.new_page();setup(b_context,b);b.goto(BASE_URL);b.locator("#legacy-entry").click()
  settings(b);expect(b.locator('#google-connect')).to_be_enabled();login(b);expect(b.locator('#sheet-preview')).to_be_visible();b.locator('#sheet-adopt').click();wait_sync(b);close_settings(b)
  expect(b.locator('#spent')).to_have_text('17,000원')
  add(a,'새 지출',3000);wait_sync(a)

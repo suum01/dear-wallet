@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+    match /users/{uid}/wallet/{recordId} {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['table', 'key', 'value', 'savedAt'])
+        && request.resource.data.table in ['entries', 'budgets', 'fixedCosts', 'settings']
+        && request.resource.data.key is string
+        && request.resource.data.savedAt == request.time;
+      allow delete: if isOwner(uid);
+    }
+    match /users/{uid}/account/profile {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['onboardingComplete', 'updatedAt'])
+        && request.resource.data.onboardingComplete is bool;
+    }
+  }
+}

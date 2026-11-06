@@ -12,6 +12,7 @@ with sync_playwright() as p:
     errors=[]
     page.on('pageerror',lambda error:errors.append(str(error)))
     page.goto(BASE_URL)
+    page.locator("#legacy-entry").click()
     date=page.evaluate("new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())")
     previous=date[:8]+'01'
     page.locator('.bottom-nav [data-nav=history]').click()
@@ -52,6 +53,7 @@ with sync_playwright() as p:
     page.locator('#calendar-today').click()
     assert page.locator('#calendar-month').inner_text()==month
     page.reload()
+    page.locator('.bottom-nav [data-nav=history]').click()
     assert page.locator('#history-view').is_visible()
     assert '32,000원' in page.locator(f'[data-date="{previous}"]').get_attribute('aria-label')
     Path('artifacts').mkdir(exist_ok=True)
@@ -79,6 +81,8 @@ with sync_playwright() as p:
     # Empty state in a completely separate browser context must not inherit test records.
     clean=browser.new_page(viewport={'width':320,'height':812})
     clean.goto(BASE_URL + '#history')
+    clean.locator('#legacy-entry').click()
+    clean.locator('.bottom-nav [data-nav=history]').click()
     assert clean.locator('#history-expense').inner_text()=='0원'
     assert not errors, errors
     print(json.dumps({'status':'passed','viewports':[320,375,390,430,768,1024,1440],'checks':['calendar totals','internal transfers excluded','third-party spending','date prefill','sheet reopens after save','month navigation','reload','browser back','future dates','keyboard focus','empty state'],'errors':errors}))

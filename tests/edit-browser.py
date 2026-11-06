@@ -13,6 +13,7 @@ with sync_playwright() as p:
     errors=[]
     page.on('pageerror',lambda error:errors.append(str(error)))
     page.goto(BASE_URL)
+    page.locator("#legacy-entry").click()
     date=page.evaluate("new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())")
     start=date[:8]+'01'
     def entry(id,type,amount,merchant,fixedId=None):
@@ -21,6 +22,7 @@ with sync_playwright() as p:
     page.evaluate('(state)=>localStorage.setItem("dear-wallet.v1",JSON.stringify(state))',state)
     page.goto(BASE_URL + '#history')
     page.reload()
+    page.locator('.bottom-nav [data-nav=history]').click()
     page.locator(f'[data-date="{date}"]').click()
     form=page.locator('#record-form')
     def open_edit(name):
@@ -100,7 +102,7 @@ with sync_playwright() as p:
     # Delete survives reload; no phantom payments reappear.
     open_edit('통신비');page.locator('#delete-record').click();page.locator('#confirm-delete').click()
     expect(page.locator('#day-empty')).to_be_visible()
-    page.reload();page.locator(f'[data-date="{date}"]').click()
+    page.reload();page.locator('[data-nav=history]:visible').first.click();page.locator(f'[data-date="{date}"]').click()
     expect(page.locator('#day-expense')).to_have_text('0원')
     assert page.locator('#day-entries li').count()==0
     assert not errors,errors

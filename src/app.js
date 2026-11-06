@@ -1,3 +1,5 @@
+import { mergeForConnection } from './sheets.js';
+import { mountAuthGate } from './auth-gate.js';
 import { mountSheetSync } from './sheet-sync.js';
 import { createHistory } from './history.js';
 import { emptyState, parseState, summarize, todayISO, validAmount, validDate, getPeriod } from './domain.js';
@@ -17,13 +19,15 @@ const icons = {
  bookmark:'<path d="M6 3h12v18l-6-4-6 4Z"/>',lock:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>'
 };
 document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[el.dataset.icon] || ''}</svg>`; });
-let sheetUI;
+let sheetUI,authGate,activeAccount,legacyImport=null;
 const KEY = 'dear-wallet.v1'; let state = emptyState(), storageBlocked = false, demo = null, cacheMissing = false;
 try { const raw = localStorage.getItem(KEY); cacheMissing = raw === null; if (raw !== null) { const loaded = parseState(raw); if (loaded) state = loaded; else storageBlocked = true; } } catch { storageBlocked = true; }
 let toastTimer;
 function toast(message) { $('#toast').textContent = message; $('#toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('#toast').classList.remove('visible'), 5000); }
 function persist(next) {
   if (demo) { demo = next; return true; }
+  if (authGate?.mode==='account' && activeAccount) {try{activeAccount.save(next);return true;}catch(error){toast(error.message);return false;}}
+  if(authGate && authGate.mode!=='legacy'){toast('로그인 상태를 확인해주세요.');return false;}
   if (storageBlocked) { toast('저장 공간을 사용할 수 없거나 기존 데이터 확인이 필요해요. 기존 기록은 덮어쓰지 않았어요.'); return false; }
   try { localStorage.setItem(KEY, JSON.stringify(next)); state = next; sheetUI?.sync.changed(); return true; } catch { toast('저장하지 못했어요. 브라우저 저장 공간과 권한을 확인해주세요.'); return false; }
 }
@@ -73,6 +77,7 @@ function render() {
   historyUI.render();
   renderUndo();
   sheetUI?.render();
+  authGate?.status();
 }
 function openDialog(name, trigger, entry = null) {
   $(`#${name}-dialog`).returnFocus = trigger;
@@ -96,7 +101,7 @@ function openDialog(name, trigger, entry = null) {
     $('#fixed-rows').replaceChildren(); current().fixedCosts.forEach(addFixedRow);
   }
   if (name === 'settings') {
-    void sheetUI?.prepare();
+    if(authGate?.mode==='legacy')void sheetUI?.prepare();
     $('#settings-form').elements.periodMode.value = current().settings.periodMode;
     $('#settings-form').elements.payday.value = current().settings.payday;
     $('#payday-label').hidden = current().settings.periodMode !== 'payday';
@@ -217,19 +222,48 @@ $('#budget-form').addEventListener('submit', e => {
 for(let i=1;i<=31;i++) $('#settings-form').elements.payday.add(new Option(`매월 ${i}일`,i));
 $('#settings-form').elements.periodMode.addEventListener('change', e => { $('#payday-label').hidden = e.target.value !== 'payday'; });
 $('#settings-form').addEventListener('submit', e => { e.preventDefault(); const next = structuredClone(current()); next.settings = { periodMode:e.currentTarget.elements.periodMode.value, payday:Number(e.currentTarget.elements.payday.value) }; if (!persist(next)) return; $('#settings-dialog').close(); render(); toast('한 달의 기준을 저장했어요.'); });
-$('#start-demo').addEventListener('click', () => {
+function startDemo() {
   sheetUI?.sync.cancelTimer(); undoDeletion = null; demo = emptyState(); demo.settings = {periodMode:'payday',payday:25}; const p = getPeriod(todayISO(),'payday',25); demo.budgets[p.start] = 1000000;
   demo.fixedCosts = [{id:'sample-fixed',name:'관리비',amount:100000,day:20}]; demo.entries = [{id:'sample',amount:620000,date:todayISO(),merchant:'예시 누적 지출',reason:'홈 둘러보기용 데이터',type:'expense',fixedId:null}]; $('#settings-dialog').close(); render(); toast('샘플 모드예요. 여기서 한 변경은 내 기록에 저장되지 않아요.');
-});
-$('#exit-demo').addEventListener('click', () => { undoDeletion = null; demo = null; render(); sheetUI?.sync.schedule(); toast('내 가계부로 돌아왔어요.'); });
+}
+$('#start-demo').addEventListener('click',()=>authGate.enterDemo());
+$('#exit-demo').addEventListener('click',()=>{undoDeletion=null;demo=null;authGate.exitDemo();render();});
 $('#bookmark-tip').addEventListener('click', () => { const next = structuredClone(current()), id=tipIndex(); next.bookmarks = next.bookmarks.includes(id) ? next.bookmarks.filter(b=>b!==id) : [...next.bookmarks,id]; if (persist(next)) { render(); toast(next.bookmarks.includes(id) ? '상식을 저장했어요. 기록 파일에도 함께 보관돼요.' : '상식 저장을 해제했어요.'); } });
 $('#export-data').addEventListener('click', () => { const blob = new Blob([JSON.stringify(current(), null, 2)],{type:'application/json'}); const url=URL.createObjectURL(blob), link=document.createElement('a'); link.href=url; link.download=`dear-wallet-${todayISO()}${demo?'-sample':''}.json`; link.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); toast('기록 파일을 내려받았어요. 현재 앱에는 파일 복원 기능이 없어요.'); });
-window.addEventListener('storage', e => { if (e.key !== KEY || demo) return; const loaded=e.newValue === null ? emptyState() : parseState(e.newValue); if (loaded) {state=loaded; render();} else {storageBlocked=true; toast('다른 창의 데이터를 확인할 수 없어 저장을 중지했어요.');} });
+window.addEventListener('storage', e => { if (e.key !== KEY || demo || authGate?.mode!=='legacy') return; const loaded=e.newValue === null ? emptyState() : parseState(e.newValue); if (loaded) {state=loaded; render();} else {storageBlocked=true; toast('다른 창의 데이터를 확인할 수 없어 저장을 중지했어요.');} });
 let lastDay=todayISO(); setInterval(()=>{if(todayISO()!==lastDay){lastDay=todayISO();render();}},60000);
-sheetUI = mountSheetSync({getLocal:()=>state,isDemo:()=>!!demo,isLocalReady:()=>!storageBlocked,applyLocal:next=>{
+sheetUI = mountSheetSync({getLocal:()=>state,isDemo:()=>!!demo || authGate?.mode!=='legacy',isLocalReady:()=>!storageBlocked,applyLocal:next=>{
   if(storageBlocked || !parseState(JSON.stringify(next))) throw new Error('브라우저 저장 공간이나 기존 데이터를 확인해주세요. 시트 내용은 덮어쓰지 않았어요.');
   localStorage.setItem(KEY,JSON.stringify(next)); state=next;
 },onApplied:render,onToast:toast});
 if(cacheMissing && sheetUI.sync.meta && !storageBlocked){try{state=structuredClone(sheetUI.sync.meta.baseline);localStorage.setItem(KEY,JSON.stringify(state));}catch{storageBlocked=true;}}
 navigate(location.hash.slice(1));
 render(); if (storageBlocked) toast('브라우저 저장 공간이나 기존 데이터를 확인해주세요. 기록을 덮어쓰지 않도록 저장을 중지했어요.');
+
+function clearSessionView(){
+  sheetUI?.sync.cancelTimer();activeAccount=null;demo=null;undoDeletion=null;recordReturnDate=null;editingEntry=null;legacyImport=null;activeView='home';state=emptyState();$('#account-import-preview').hidden=true;
+  document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());render();
+}
+function openLegacy(){
+  sheetUI?.sync.cancelTimer();activeAccount=null;demo=null;undoDeletion=null;
+  try{const raw=localStorage.getItem(KEY);state=raw?parseState(raw):emptyState();if(!state){storageBlocked=true;state=emptyState();}}
+  catch{storageBlocked=true;state=emptyState();}
+  render();
+}
+let authStorage;try{authStorage=localStorage;}catch{authStorage={getItem:()=>null,setItem:()=>{throw new Error('브라우저 저장 권한을 확인해주세요.');}};}
+authGate=mountAuthGate({storage:authStorage,onAccount:(next,store)=>{activeAccount=store;state=structuredClone(next);if(authGate?.mode!=='demo')demo=null;render();},onClear:clearSessionView,onDemo:startDemo,onLegacy:openLegacy,onHome:()=>{navigate('home');if(location.hash!=='#home')location.hash='home';render();}});
+render();
+
+$('#account-import-local').addEventListener('click',()=>{
+  try{
+    const raw=localStorage.getItem(KEY);legacyImport=raw?parseState(raw):emptyState();
+    if(!legacyImport)throw new Error('기존 기록을 확인하지 못했어요. 원본은 그대로 보관했어요.');
+    $('#account-import-description').textContent=`이 기기의 기존 기록 ${legacyImport.entries.filter(entry=>!entry.deletedAt).length}건을 계정에 합칠까요? 같은 ID와 기간 예산은 계정의 값을 유지해요.`;
+    $('#account-import-preview').hidden=false;
+  }catch(error){toast(error.message);}
+});
+$('#account-import-cancel').addEventListener('click',()=>{$('#account-import-preview').hidden=true;legacyImport=null;});
+$('#account-import-confirm').addEventListener('click',()=>{
+  if(authGate.mode!=='account' || !activeAccount || !legacyImport)return;
+  try{activeAccount.save(mergeForConnection(activeAccount.local,legacyImport));$('#account-import-preview').hidden=true;legacyImport=null;toast('기존 기록을 합쳤어요. 원본도 이 기기에 유지해요.');}catch(error){toast(error.message);}
+});

@@ -7,11 +7,17 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "node scripts/serve.mjs",
-    "start": "node scripts/serve.mjs",
+    "dev": "npm run build && node scripts/serve.mjs",
+    "start": "npm run build && node scripts/serve.mjs",
     "test": "node --test --test-isolation=none tests/*.test.mjs",
-    "check": "node --check src/app.js && node --check src/domain.js && node --check src/history.js && node --check scripts/serve.mjs && node --check scripts/build.mjs && node --check scripts/preview.mjs && node --check src/sheets.js && node --check src/sheet-sync.js && node --check src/google-config.js",
+    "check": "node --check src/app.js && node --check src/domain.js && node --check src/history.js && node --check scripts/serve.mjs && node --check scripts/build.mjs && node --check scripts/preview.mjs && node --check src/sheets.js && node --check src/sheet-sync.js && node --check src/google-config.js && node --check src/auth-gate.js && node --check src/account-store.js && node --check src/firebase-provider.js",
     "build": "node scripts/build.mjs",
     "preview": "node scripts/preview.mjs"
+  },
+  "dependencies": {
+    "firebase": "13.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
   }
 }
