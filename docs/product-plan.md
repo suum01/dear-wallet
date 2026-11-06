@@ -113,4 +113,4 @@
 
 ## 계정 로그인 단계
 
-Google 계정으로 로그인한 뒤 본인 계정의 데이터를 읽고 홈으로 이동하는 화면을 구현했다. 신규 사용자는 집계 기준 선택을 거친다. Firebase Authentication·Firestore를 연결하는 실제 SDK 코드와 UID 소유자 보안 규칙 파일을 준비했다. Firebase 웹앱 설정은 아직 필요하며 실제 Google 로그인 검증은 미완료다. 기존 시트·로컬 기록은 보존하고 사용자가 명시적으로 가져오기를 선택해야 계정에 합친다. [상세 준비 상태](firebase-login.md)를 참고한다.
+Google 계정으로 로그인한 뒤 본인 계정의 데이터를 읽고 홈으로 이동하는 화면을 구현했다. 신규 사용자는 집계 기준 선택을 거친다. Firebase Authentication·Firestore를 연결하는 실제 SDK 코드와 UID 소유자 보안 규칙 파일을 준비했다. Firebase 웹앱 설정을 등록했으며 실제 Google 로그인과 Firestore 권한 검증은 미완료다. 기존 시트·로컬 기록은 보존하고 사용자가 명시적으로 가져오기를 선택해야 계정에 합친다. [상세 준비 상태](firebase-login.md)를 참고한다.

@@ -43,9 +43,9 @@ export function mountAuthGate({storage,onAccount,onClear,onDemo,onLegacy,onHome}
     if(!configured){ready=true;display('login');message('Google 로그인 연결을 준비 중이에요. 먼저 둘러보거나 이 기기의 기록을 열 수 있어요.');return;}
     message('로그인 상태를 확인하고 있어요…');
     try{
-      const module=await import('./firebase-provider.js');provider=await module.createFirebaseProvider(FIREBASE_CONFIG);ready=true;display('login');
+      const module=await import('./firebase-provider.js');provider=await module.createFirebaseProvider(FIREBASE_CONFIG);ready=true;if(!['legacy','demo'].includes(mode))display('login');
       provider.subscribe(nextUser=>{if(['demo','legacy'].includes(mode))return;void openAccount(nextUser);},error=>{ready=true;display('login');message(loginError(error),true);});
-    }catch(error){ready=false;display('login');message(loginError(error),true);$('#retry-login-init').hidden=false;}
+    }catch(error){ready=false;if(!['legacy','demo'].includes(mode))display('login');message(loginError(error),true);$('#retry-login-init').hidden=false;}
   }
   $('#google-sign-in').addEventListener('click',()=>{
     if(!provider){message('Google 로그인 서비스 연결 설정이 아직 완료되지 않았어요. 기존 기록은 그대로 보관돼요.',true);return;}

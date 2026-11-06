@@ -45,8 +45,8 @@ with sync_playwright() as p:
   context.route('**/src/firebase-provider.js',lambda route:route.fulfill(content_type='text/javascript',body=PROVIDER))
   context.route('**/__auth_test__/**',endpoint)
   context.on('page',lambda page:page.on('pageerror',lambda error:errors.append(str(error))))
- # Production without Firebase config must show an honest setup error, never pretend to log in.
- raw=browser.new_page(viewport={'width':375,'height':812});raw.goto(BASE_URL)
+ # Simulate a missing configuration to verify the recovery path; production now has real public config.
+ raw=browser.new_page(viewport={'width':375,'height':812});raw.route('**/src/firebase-config.js',lambda route:route.fulfill(content_type='text/javascript',body='export const FIREBASE_CONFIG=null;'));raw.goto(BASE_URL)
  expect(raw.locator('#login-view')).to_be_visible();expect(raw.locator('#app-shell')).to_be_hidden();raw.locator('#google-sign-in').click();expect(raw.locator('#login-status')).to_contain_text('설정이 아직 완료')
  raw.locator('#preview-app').click();expect(raw.locator('#app-shell')).to_be_visible();expect(raw.locator('#ring-value')).to_have_text('62%');raw.locator('#exit-demo').click();expect(raw.locator('#login-view')).to_be_visible()
  raw.locator('#toast').evaluate("el=>el.classList.remove('visible')")
@@ -73,6 +73,9 @@ with sync_playwright() as p:
  # The private home must stay hidden when cloud data cannot be loaded.
  page.locator('.topbar [data-open=settings]').click();page.locator('#session-sign-out').click();deny['active']=True;page.evaluate("window.testNextUser='alice'");page.locator('#google-sign-in').click();expect(page.locator('#login-status')).to_contain_text('접근');expect(page.locator('#app-shell')).to_be_hidden();expect(page.locator('#retry-account')).to_be_visible();deny['active']=False;page.locator('#retry-account').click();expect(page.locator('#app-shell')).to_be_visible();expect(page.locator('#spent')).to_have_text('10,000원')
  page.locator('.topbar [data-open=settings]').click();page.locator('#session-sign-out').click();page.evaluate("window.testSkipAuthEvent=true;window.testNextUser='alice'");page.locator('#google-sign-in').click();expect(page.locator('#app-shell')).to_be_visible();expect(page.locator('#spent')).to_have_text('10,000원')
+ slow_context=browser.new_context(viewport={'width':390,'height':844});setup(slow_context)
+ slow_context.route('**/src/firebase-provider.js',lambda route:route.fulfill(content_type='text/javascript',body=PROVIDER.replace('let callback;','await new Promise(resolve=>setTimeout(resolve,700));let callback;')))
+ slow=slow_context.new_page();slow.goto(BASE_URL);slow.locator('#legacy-entry').click();expect(slow.locator('#app-shell')).to_be_visible();slow.wait_for_timeout(1000);expect(slow.locator('#app-shell')).to_be_visible();expect(slow.locator('#login-view')).to_be_hidden()
  assert not errors,errors
- print(json.dumps({'status':'passed','authentication':'simulated Firebase adapter; no real Google account used','checks':['unconfigured state','demo and return','login cancel','popup blocked','login to home','session restoration','logout','account isolation','account save','first-login onboarding to home','cloud denial keeps home hidden','retry','sign-in result without duplicate auth event'],'viewports':[320,375,390,430,768,1024,1440]}))
+ print(json.dumps({'status':'passed','authentication':'simulated Firebase adapter; no real Google account used','checks':['unconfigured state','demo and return','login cancel','popup blocked','login to home','session restoration','logout','account isolation','account save','first-login onboarding to home','cloud denial keeps home hidden','retry','sign-in result without duplicate auth event','late SDK initialization preserves local mode'],'viewports':[320,375,390,430,768,1024,1440]}))
  browser.close()
