@@ -23,6 +23,30 @@ test('car rental recognition preserves purpose, personal rules and transaction t
  assert.equal(classify(input('쏘카','','transfer')).category,'내부 이체');
  assert.equal(classify(input('의상실','의상 대여')).category,'미분류');
 });
+test('classify Kiwoom automatic funding and stock purchases in merchant or content',()=>{
+ for(const merchant of ['키움자동충전','키움 자동 충전','(주) 키움증권','KIWOOM','국내주식 매수','해외 주식 투자'])assert.equal(classify(input(merchant)).category,'주식',merchant);
+ for(const description of ['키움자동충전','키움 자동 충전','주식','해외주식 매수'])assert.equal(classify(input('은행',description)).category,'주식',description);
+ assert.match(classify(input('키움자동충전')).message,/내 계좌 간 이체/);
+});
+test('company names and unrelated automatic top-ups are not stock trades',()=>{
+ for(const merchant of ['주식회사 모르는상점','모르는상점 주식 회사','자동충전','교통카드 자동충전','키움어린이집'])assert.notEqual(classify(input(merchant)).category,'주식',merchant);
+ assert.equal(classify(input('주식회사 김밥천국')).category,'식비');
+});
+test('stock categories respect specific purpose, personal rules and selected transaction type',()=>{
+ assert.equal(classify(input('키움증권','저녁 식사 정산')).category,'식비');
+ assert.equal(classify(input('키움증권','주식과 저녁 식사')).category,'미분류');
+ assert.equal(classify({...input('키움자동충전'),rules:[learned('키움자동충전','투자')]}).category,'투자');
+ assert.equal(classify(input('키움자동충전','','income')).category,'기타 수입');
+ assert.equal(classify(input('키움자동충전','','transfer')).category,'내부 이체');
+});
+test('a stock category does not silently change financial totals or rewrite saved entries',()=>{
+ const state=emptyState();state.entries=[{id:'old',date:'2026-11-06',type:'expense',amount:1000,merchant:'키움자동충전',category:'미분류',reason:'',fixedId:null}];
+ const prediction=classify(input(state.entries[0].merchant));assert.equal(prediction.category,'주식');assert.equal(state.entries[0].category,'미분류');
+ state.entries.push({id:'stock',date:'2026-11-06',type:'expense',amount:5000,merchant:'키움자동충전',category:prediction.category,reason:'',fixedId:null});
+ state.entries.push({id:'transfer',date:'2026-11-06',type:'transfer',amount:10000,merchant:'키움자동충전',category:'내부 이체',reason:'',fixedId:null});
+ assert.equal(summarize(state,'2026-11-06').spent,6000);assert.ok(parseState(JSON.stringify(state)));
+ assert.equal(decodeTables({entries:[TABLES.entries.headers,...state.entries.map(entry=>encodePatch({table:'entries',key:entry.id,value:entry},TIME))]}).entries.find(entry=>entry.id==='stock').category,'주식');
+});
 for(const merchant of ['CU','GS25','쿠팡','다이소','네이버쇼핑','모르는 가게','culture club'])test(`do not guess from ambiguous merchant ${merchant}`,()=>assert.equal(classify(input(merchant)).category,'미분류'));
 test('mixed-purpose purchases remain unclassified, including specific products',()=>{
  assert.equal(classify(input('이마트','우유랑 샴푸')).category,'미분류');assert.equal(classify(input('쿠팡','커피머신과 치약')).category,'미분류');
