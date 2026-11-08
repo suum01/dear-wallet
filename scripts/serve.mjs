@@ -8,7 +8,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
     const filename = path.resolve(root, '.' + (pathname === '/' ? '/index.html' : pathname));
-    if (!filename.startsWith(root + path.sep) || !['index.html', 'src', 'favicon.svg', 'manifest.webmanifest'].includes(path.relative(root, filename).split(path.sep)[0])) {
+    if (!filename.startsWith(root + path.sep) || !['index.html', 'src', 'favicon.svg', 'wallet-mascot.svg', 'manifest.webmanifest'].includes(path.relative(root, filename).split(path.sep)[0])) {
       res.writeHead(404); return res.end('Not found');
     }
     const body = await readFile(filename);

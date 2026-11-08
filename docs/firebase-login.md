@@ -1,5 +1,13 @@
 # 계정 로그인과 홈 진입
 
+## 일반 이용자와 서비스 운영자
+
+배포된 Dear Wallet의 일반 이용자는 웹앱에서 Google 계정으로 로그인하면 된다. Firebase 콘솔 접속, 프로젝트 생성, API 키 발급, Google Sheets 연결은 필요하지 않다. 첫 로그인에서는 한 달의 기준만 선택한다.
+
+서비스 운영자가 연결한 하나의 Firebase 프로젝트에서 Google 로그인을 처리하고, 로그인한 이용자마다 UID에 해당하는 별도의 기록 경로를 사용한다. 새 사람이 가입할 때마다 Firebase 프로젝트를 만들거나 소스를 수정하지 않는다. Google 로그인 제공자·승인 도메인·Firestore 보안 규칙·AI 서비스와 사용량 관리는 운영자가 담당한다.
+
+아래의 초기 설정 절차는 직접 별도 서비스를 배포하거나 프로젝트를 운영하는 개발자를 위한 안내다.
+
 로그인 화면 → Google 계정 선택 → Firebase Authentication 세션 → 본인 UID의 Firestore 기록 조회 → 홈 순서로 동작한다. 처음 가입한 계정은 집계 기준을 선택한 뒤 홈으로 간다. 로그인·조회가 실패하거나 취소되면 홈을 표시하지 않는다. 구글 계정 비밀번호를 앱에서 받지 않는다.
 
 최초 HTML부터 로그인 화면 대신 큰 노란 지갑 캐릭터를 보여준다. SDK 초기화·세션 확인·로그인 팝업 대기·계정 기록 조회 동안 이 로딩 화면을 유지하고, 로그아웃 상태가 확인된 경우에만 Google 로그인 화면을 표시한다. 캐릭터의 투명도는 0.74이며 안내 글씨는 투명하게 만들지 않는다. 동작 줄이기 설정에서는 캐릭터와 점 애니메이션을 멈춘다. 로딩 중에도 샘플/기존 기기 기록으로 이동할 수 있다. `tests/loading-browser.py`에서 느린 SDK·인증·조회 상황과 320~1440px 화면을 검증한다.
@@ -16,7 +24,7 @@
 2. 프로젝트 설정 → 내 앱 → 웹 앱(`</>`)을 등록한다. GitHub Pages를 계속 사용하므로 Firebase Hosting 선택은 필수가 아니다.
 3. 발급된 웹 `firebaseConfig`의 `apiKey`, `authDomain`, `projectId`, `appId`를 `src/firebase-config.js`에 등록한다. 이는 브라우저에 공개되는 프로젝트 식별 설정이다. 서비스 계정 키·OAuth client secret·관리자 토큰은 넣지 않는다.
 4. Authentication → Sign-in method에서 Google을 활성화하고 지원 이메일을 지정한다.
-5. Authentication → Settings → Authorized domains에 `suum01.github.io`를 추가한다. 로컬에서 실제 Google 로그인도 검사하려면 로컬 도메인을 별도로 등록한다.
+5. Authentication → Settings → Authorized domains에 배포할 도메인(현재 서비스는 `suum01.github.io`)을 추가한다. 로컬에서 실제 Google 로그인도 검사하려면 로컬 도메인을 별도로 등록한다.
 6. Firestore Database를 기본 `(default)` 데이터베이스로 생성한다. 테스트 공개 모드 대신 기본 접근을 거부하는 프로덕션 모드로 시작한다.
 7. Rules 탭에 `firebase/firestore.rules` 내용을 적용한다. 이 규칙을 적용하기 전에는 계정 데이터 조회가 거부될 수 있으며, 앱은 오류 화면에 머문다. 인증 없는 읽기·쓰기나 전역 공개 규칙으로 우회하지 않는다.
 8. GitHub Pages 자동 배포가 끝난 후 실제 브라우저에서 Google 로그인과 홈 진입, 다른 기기의 동일 계정 조회, 로그아웃을 확인한다.
