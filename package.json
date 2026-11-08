@@ -10,7 +10,7 @@
     "dev": "npm run build && node scripts/serve.mjs",
     "start": "npm run build && node scripts/serve.mjs",
     "test": "node --test --test-isolation=none tests/*.test.mjs",
-    "check": "node --check src/app.js && node --check src/domain.js && node --check src/history.js && node --check src/review.js && node --check scripts/serve.mjs && node --check scripts/build.mjs && node --check scripts/preview.mjs && node --check src/sheets.js && node --check src/sheet-sync.js && node --check src/google-config.js && node --check src/auth-gate.js && node --check src/account-store.js && node --check src/firebase-provider.js && node --check src/categorizer.js && node --check src/category-rules.js && node --check src/ai-categorizer.js && node --check src/category-catalog.js",
+    "check": "node --check src/app.js && node --check src/domain.js && node --check src/history.js && node --check src/review.js && node --check scripts/serve.mjs && node --check scripts/build.mjs && node --check scripts/preview.mjs && node --check src/sheets.js && node --check src/sheet-sync.js && node --check src/google-config.js && node --check src/auth-gate.js && node --check src/account-store.js && node --check src/firebase-provider.js && node --check src/categorizer.js && node --check src/category-rules.js && node --check src/ai-categorizer.js && node --check src/category-catalog.js && node --check src/category-picker.js",
     "build": "node scripts/build.mjs",
     "preview": "node scripts/preview.mjs"
   },

@@ -44,7 +44,7 @@ function result(category,source,message){return {category,source,message:categor
 export function classify({merchant='',description='',type='expense',rules=[]}) {
   if(type==='transfer')return result('내부 이체','transfer','내 계좌 간 이체는 소비 합계에서 제외해요.');
   const key=merchantKey(merchant),saved=rules.find(rule=>rule.type===type && rule.merchantKey===key);
-  if(saved)return result(saved.category,'merchant-rule','내가 기억해 둔 사용처 분류예요.');
+  if(saved)return result(saved.category,'merchant-rule',`내가 기억해 둔 ${type==='income'?'입금처':'사용처'} 분류예요.`);
   if(type==='income'){
     const found=candidates(`${merchant} ${description}`,INCOME);
     return found.length===1?result(found[0],'keyword','적어준 수입 내용으로 분류했어요.'):result(FALLBACK.income,'unclassified','수입 종류를 알기 어려워 기타 수입으로 남겨요.');

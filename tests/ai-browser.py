@@ -49,7 +49,7 @@ with sync_playwright() as p:
  assert wallet()['entries'][-1]['categorySource']=='ai';assert wallet()['settings']['aiCategorization'] is False
 
  # A manual choice wins over an in-flight response, even for a locally known item.
- open_record('씨유','치약');wait_count(2);form.locator('[name=category]').fill('생활용품');respond(1,'식비')
+ open_record('씨유','치약');wait_count(2);page.locator('#category-toggle').click();page.locator('#category-options').get_by_role('button',name='생활용품',exact=True).click();respond(1,'식비')
  expect(form.locator('[name=category]')).to_have_value('생활용품');expect(page.locator('#category-mode-badge')).to_have_text('직접 선택');save();assert wallet()['entries'][-1]['categorySource']=='manual'
 
  # Old text and old dialogs cannot receive a late response.
@@ -96,11 +96,11 @@ with sync_playwright() as p:
  assert wallet()['settings']['customCategories'][0]['name']=='반려동물';assert wallet()['entries'][-1]['category']=='반려동물'
  index=count();open_record('펫마트','반려동물 사료');wait_count(index+1);assert page.evaluate('window.testAIRequests.at(-1).input.customCategories')==['반려동물']
  respond(index,'반려동물');expect(page.locator('#category-mode-badge')).to_have_text('AI');expect(page.locator('#category-suggestion')).to_be_hidden();save()
- propose('중고판매','income');expect(page.locator('#category-options option[value="반려동물"]')).to_have_count(0);page.locator('#accept-category-suggestion').click();save()
+ propose('중고판매','income');expect(page.locator('#category-options button[data-category-value="반려동물"]')).to_have_count(0);page.locator('#accept-category-suggestion').click();save()
  assert wallet()['entries'][-1]['type']=='income';assert len(wallet()['settings']['customCategories'])==2
  page.reload();expect(page.locator('#app-shell')).to_be_visible();open_record('다른 상점','새 상품');expect(page.locator('#ai-category-enabled')).to_have_count(0);wait_count(1);reject(0,'ai/api-not-enabled');expect(page.locator('#ai-category-retry')).to_be_visible()
  assert any(e.get('categorySource')=='ai' for e in wallet()['entries'])
- expect(page.locator('#category-options option[value="반려동물"]')).to_have_count(1);expect(page.locator('#category-options option[value="중고판매"]')).to_have_count(0)
+ expect(page.locator('#category-options button[data-category-value="반려동물"]')).to_have_count(1);expect(page.locator('#category-options button[data-category-value="중고판매"]')).to_have_count(0)
  Path('artifacts').mkdir(exist_ok=True);page.locator('#toast').evaluate("el=>el.classList.remove('visible')")
  for width in [320,375,390,430,768,1024,1440]:
   page.set_viewport_size({'width':width,'height':1000});page.locator('#ai-category-disclosure').scroll_into_view_if_needed();assert form.evaluate('el=>el.scrollWidth<=el.clientWidth'),f'AI form overflow {width}'

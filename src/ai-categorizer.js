@@ -39,7 +39,7 @@ export function aiResult(response, type, customCategories=[]) {
     else if(!['미분류','기타 수입'].includes(category) || aiCategories(type==='income'?'expense':'income').some(name=>categoryIdentity(name)===categoryIdentity(suggestedCategory)) || categoryIdentity(suggestedCategory)===categoryIdentity('내부 이체'))throw new Error('AI가 추천한 카테고리를 확인하지 못했어요.');
   }
   const suggestionReason=typeof data.suggestionReason==='string'?data.suggestionReason.slice(0,120):'';
-  return { category, source: 'ai',...(suggestedCategory?{suggestedCategory,suggestionReason}:{}), message: suggestedCategory?'기존 분류에 맞는 항목이 없어 새 카테고리를 추천했어요.': ['미분류','기타 수입'].includes(category) ? 'AI가 용도를 확정하지 못했어요. 직접 바꾸거나 그대로 저장할 수 있어요.' : category === '주식' ? 'AI가 주식 거래로 분류했어요. 내 증권계좌로 옮긴 돈이면 ‘내 계좌 간 이체’를 선택하면 소비 합계에서 빠져요.' : 'AI가 사용처와 내용을 읽고 분류했어요. 틀리면 직접 바꿀 수 있어요.' };
+  return { category, source: 'ai',...(suggestedCategory?{suggestedCategory,suggestionReason}:{}), message: suggestedCategory?'기존 분류에 맞는 항목이 없어 새 카테고리를 추천했어요.': ['미분류','기타 수입'].includes(category) ? 'AI가 용도를 확정하지 못했어요. 직접 바꾸거나 그대로 저장할 수 있어요.' : category === '주식' ? 'AI가 주식 거래로 분류했어요. 내 증권계좌로 옮긴 돈이면 ‘내 계좌 간 이체’를 선택하면 소비 합계에서 빠져요.' : `AI가 ${type==='income'?'입금처와 수입 내용':'사용처와 내용'}을 읽고 분류했어요. 틀리면 직접 바꿀 수 있어요.` };
 }
 export function aiError(error) {
   const code = String(error?.code || ''), message = String(error?.message || '');
