@@ -6,6 +6,7 @@ import { mergeForConnection } from './sheets.js';
 import { mountAuthGate } from './auth-gate.js';
 import { mountSheetSync } from './sheet-sync.js';
 import { createHistory } from './history.js';
+import { createReview } from './review.js';
 import { emptyState, parseState, summarize, todayISO, validAmount, validDate, getPeriod } from './domain.js';
 const $ = s => document.querySelector(s);
 const sameEntry = (a,b) => a && b && [...new Set([...Object.keys(a),...Object.keys(b)])].filter(key=>key!=='updatedAt').every(key=>a[key]===b[key]);
@@ -40,6 +41,7 @@ function persist(next) {
   try { localStorage.setItem(KEY, JSON.stringify(next)); state = next; sheetUI?.sync.changed(); return true; } catch { toast('저장하지 못했어요. 브라우저 저장 공간과 권한을 확인해주세요.'); return false; }
 }
 const current = () => demo || state;
+const reviewUI=createReview({getState:current});
 let activeView = 'home', recordReturnDate = null, editingEntry = null, undoDeletion = null;
 const historyUI = createHistory({ getState: current, onOpenSheet: trigger => { $('#day-dialog').returnFocus = trigger; }, onRecord: (date, trigger) => {
   openDialog('record', trigger); $('#record-form').elements.date.value = date; recordReturnDate = date;
@@ -83,6 +85,7 @@ function render() {
   const bookmarked = s.bookmarks.includes(tipIndex()); $('#bookmark-tip').setAttribute('aria-pressed', String(bookmarked)); $('#bookmark-tip').setAttribute('aria-label', bookmarked ? '오늘의 금융 상식 저장 해제' : '오늘의 금융 상식 저장'); $('#bookmark-tip svg').style.fill = bookmarked ? '#f8df83' : 'none';
   $('#demo-banner').hidden = !demo;
   historyUI.render();
+  reviewUI.render();
   renderUndo();
   sheetUI?.render();
   authGate?.status();
@@ -134,24 +137,25 @@ document.querySelectorAll('dialog').forEach(dialog => {
   });
 });
 function navigate(view, focus = false) {
-  activeView = view === 'history' ? 'history' : 'home';
-  $('#home-view').hidden = activeView !== 'home'; $('#history-view').hidden = activeView !== 'history';
-  $('.breadcrumb strong').textContent = activeView === 'home' ? '홈' : '내역';
-  document.title = `${activeView === 'home' ? '홈' : '내역'} — Dear Wallet`;
+  activeView = ['history','review'].includes(view) ? view : 'home';
+  for(const name of ['home','history','review'])$(`#${name}-view`).hidden=activeView!==name;
+  $('.mobile-record').hidden=activeView==='review';
+  const title={home:'홈',history:'내역',review:'돌아보기'}[activeView];
+  $('.breadcrumb strong').textContent=title;document.title=`${title} — Dear Wallet`;
   document.querySelectorAll('[data-nav]').forEach(button => {
     const selected = button.dataset.nav === activeView;
     button.classList.toggle('active', selected);
     if (selected) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
   });
   historyUI.render();
+  reviewUI.render();
   if (focus) {
     window.scrollTo({top:0, behavior:'instant'});
-    const heading = document.querySelector(activeView === 'home' ? '#home-view h1' : '#history-title');
+    const heading = document.querySelector(activeView === 'home' ? '#home-view h1' : `#${activeView}-title`);
     heading.tabIndex = -1; heading.focus({preventScroll:true});
   }
 }
 document.querySelectorAll('[data-nav]').forEach(button => button.addEventListener('click', () => {
-  if (button.dataset.nav === 'review') { toast('돌아보기는 다음 단계에서 만들 예정이에요. 먼저 달력에서 기록을 확인해보세요.'); return; }
   const view = button.dataset.nav;
   if (location.hash !== `#${view}`) location.hash = view; else navigate(view, true);
 }));
@@ -317,6 +321,7 @@ for(let i=1;i<=31;i++) $('#settings-form').elements.payday.add(new Option(`매�
 $('#settings-form').elements.periodMode.addEventListener('change', e => { $('#payday-label').hidden = e.target.value !== 'payday'; });
 $('#settings-form').addEventListener('submit', e => { e.preventDefault(); const next = structuredClone(current()); next.settings = { ...next.settings, periodMode:e.currentTarget.elements.periodMode.value, payday:Number(e.currentTarget.elements.payday.value) }; if (!persist(next)) return; $('#settings-dialog').close(); render(); toast('한 달의 기준을 저장했어요.'); });
 function startDemo() {
+  reviewUI.reset();
   sheetUI?.sync.cancelTimer(); undoDeletion = null; demo = emptyState(); demo.settings = {periodMode:'payday',payday:25}; const p = getPeriod(todayISO(),'payday',25); demo.budgets[p.start] = 1000000;
   demo.fixedCosts = [{id:'sample-fixed',name:'관리비',amount:100000,day:20}]; demo.entries = [{id:'sample',amount:620000,date:todayISO(),merchant:'예시 누적 지출',reason:'홈 둘러보기용 데이터',type:'expense',fixedId:null}]; $('#settings-dialog').close(); render(); toast('샘플 모드예요. 여기서 한 변경은 내 기록에 저장되지 않아요.');
 }
@@ -335,18 +340,20 @@ navigate(location.hash.slice(1));
 render(); if (storageBlocked) toast('브라우저 저장 공간이나 기존 데이터를 확인해주세요. 기록을 덮어쓰지 않도록 저장을 중지했어요.');
 
 function clearSessionView(){
+  reviewUI.reset();
   liveAI.cancel();recordVersion++;pendingCategory=null;declinedSuggestionKey=null;
   sheetUI?.sync.cancelTimer();activeAccount=null;demo=null;undoDeletion=null;recordReturnDate=null;editingEntry=null;legacyImport=null;activeView='home';state=emptyState();$('#account-import-preview').hidden=true;
   document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());render();
 }
 function openLegacy(){
+  reviewUI.reset();
   sheetUI?.sync.cancelTimer();activeAccount=null;demo=null;undoDeletion=null;
   try{const raw=localStorage.getItem(KEY);state=raw?parseState(raw):emptyState();if(!state){storageBlocked=true;state=emptyState();}}
   catch{storageBlocked=true;state=emptyState();}
   render();
 }
 let authStorage;try{authStorage=localStorage;}catch{authStorage={getItem:()=>null,setItem:()=>{throw new Error('브라우저 저장 권한을 확인해주세요.');}};}
-authGate=mountAuthGate({storage:authStorage,onAccount:(next,store)=>{activeAccount=store;state=structuredClone(next);if(authGate?.mode!=='demo')demo=null;render();},onClear:clearSessionView,onDemo:startDemo,onLegacy:openLegacy,onHome:()=>{navigate('home');if(location.hash!=='#home')location.hash='home';render();}});
+authGate=mountAuthGate({storage:authStorage,onAccount:(next,store)=>{activeAccount=store;state=structuredClone(next);if(authGate?.mode!=='demo')demo=null;render();},onClear:clearSessionView,onDemo:startDemo,onLegacy:openLegacy,onHome:()=>{const view=['home','history','review'].includes(location.hash.slice(1))?location.hash.slice(1):'home';navigate(view);if(location.hash!==`#${view}`)location.hash=view;render();}});
 render();
 
 $('#account-import-local').addEventListener('click',()=>{

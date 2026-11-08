@@ -60,11 +60,14 @@ with sync_playwright() as p:
  page.evaluate("window.testLoginError='auth/popup-closed-by-user'");page.locator('#google-sign-in').click();expect(page.locator('#login-status')).to_contain_text('취소');expect(page.locator('#app-shell')).to_be_hidden()
  page.evaluate("window.testLoginError='auth/popup-blocked'");page.locator('#google-sign-in').click();expect(page.locator('#login-status')).to_contain_text('차단');expect(page.locator('#app-shell')).to_be_hidden()
  page.evaluate('window.testLoginError=null');page.locator('#google-sign-in').click();expect(page.locator('#app-shell')).to_be_visible();expect(page.locator('#login-view')).to_be_hidden();expect(page.locator('#spent')).to_have_text('10,000원')
+ page.locator('.bottom-nav [data-nav=review]').click();expect(page.locator('#review-view')).to_be_visible();expect(page.locator('#review-total-expense')).to_have_text('10,000원');page.locator('.bottom-nav [data-nav=home]').click()
  # Session restoration opens the same account directly.
  page.reload();expect(page.locator('#app-shell')).to_be_visible();expect(page.locator('#spent')).to_have_text('10,000원')
  page.locator('.topbar [data-open=settings]').click();expect(page.locator('#account-email')).to_have_text('alice@example.test');page.locator('#session-sign-out').click();expect(page.locator('#login-view')).to_be_visible();expect(page.locator('#app-shell')).to_be_hidden()
+ expect(page.locator('#review-total-expense')).to_have_text('0원');expect(page.locator('#review-expense-rows tr')).to_have_count(0)
  # Another account must never see Alice's local cache or remote records.
  page.evaluate("window.testNextUser='bob'");page.locator('#google-sign-in').click();expect(page.locator('#spent')).to_have_text('23,000원');expect(page.locator('#app-shell')).to_be_visible()
+ page.locator('.bottom-nav [data-nav=review]').click();expect(page.locator('#review-total-expense')).to_have_text('23,000원');page.locator('.bottom-nav [data-nav=home]').click()
  page.locator('.mobile-record').click();form=page.locator('#record-form');form.locator('[name=amount]').fill('2000');form.locator('[name=merchant]').fill('bob new');form.get_by_role('button',name='기록 저장하기').click();expect(page.locator('#account-sync-text')).to_have_text('계정에 저장 완료',timeout=15000)
  assert len(users['alice']['state']['entries'])==1;assert len(users['bob']['state']['entries'])==2
  page.locator('.topbar [data-open=settings]').click();page.locator('#session-sign-out').click();page.evaluate("window.testNextUser='new-user'");page.locator('#google-sign-in').click();expect(page.locator('#onboarding-view')).to_be_visible();expect(page.locator('#app-shell')).to_be_hidden()
@@ -77,5 +80,5 @@ with sync_playwright() as p:
  slow_context.route('**/src/firebase-provider.js',lambda route:route.fulfill(content_type='text/javascript',body=PROVIDER.replace('let callback;','await new Promise(resolve=>setTimeout(resolve,700));let callback;')))
  slow=slow_context.new_page();slow.goto(BASE_URL);slow.locator('#loading-legacy-entry').click();expect(slow.locator('#app-shell')).to_be_visible();slow.wait_for_timeout(1000);expect(slow.locator('#app-shell')).to_be_visible();expect(slow.locator('#login-view')).to_be_hidden()
  assert not errors,errors
- print(json.dumps({'status':'passed','authentication':'simulated Firebase adapter; no real Google account used','checks':['unconfigured state','demo and return','login cancel','popup blocked','login to home','session restoration','logout','account isolation','account save','first-login onboarding to home','cloud denial keeps home hidden','retry','sign-in result without duplicate auth event','late SDK initialization preserves local mode'],'viewports':[320,375,390,430,768,1024,1440]}))
+ print(json.dumps({'status':'passed','authentication':'simulated Firebase adapter; no real Google account used','checks':['unconfigured state','demo and return','login cancel','popup blocked','login to home','session restoration','logout','account isolation','review clears private totals and categories','account save','first-login onboarding to home','cloud denial keeps home hidden','retry','sign-in result without duplicate auth event','late SDK initialization preserves local mode'],'viewports':[320,375,390,430,768,1024,1440]}))
  browser.close()

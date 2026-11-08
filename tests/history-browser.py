@@ -34,7 +34,7 @@ with sync_playwright() as p:
         form.locator('[name=merchant]').fill(merchant)
         form.get_by_role('button',name='기록 저장하기').click()
         page.locator('#day-dialog').wait_for(state='visible')
-        assert page.locator('#day-entries').get_by_text(merchant,exact=True).is_visible()
+        assert page.locator('#day-entries .entry-detail > strong').filter(has_text=merchant).is_visible()
         page.locator('#day-dialog [data-close]').click()
     record('expense',12000,'점심')
     record('expense',20000,'친구에게 송금')
