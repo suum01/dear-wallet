@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { emptyState, summarize } from '../src/domain.js';
 import { TABLES, stateDiff, applyPatches, mergeForConnection, encodePatch, decodeTables, spreadsheetId, GoogleSheets } from '../src/sheets.js';
 import { SheetSync, readSyncMeta } from '../src/sheet-sync.js';
-const ID='1SRhTmZ93acASOpeXKm-gZJuN-178ICvIL5VSBNwCIEo';
+const ID='test-sheet-id-00000000000000000000000000000000';
 const TIME='2026-11-06T12:00:00Z';
 const entry=(id,amount=12000)=>({id,date:'2026-11-06',type:'expense',amount,merchant:'=HYPERLINK("bad")',reason:'친구와 저녁',category:'식비',fixedId:null});
 function tablesFor(patches){
@@ -14,7 +14,7 @@ function tablesFor(patches){
 function memoryStorage(){const data=new Map();return {getItem:key=>data.get(key) ?? null,setItem:(key,value)=>data.set(key,value),removeItem:key=>data.delete(key),data};}
 function server(initial=emptyState()){
  let state=structuredClone(initial);const writes=[];
- return {writes,get state(){return structuredClone(state);},set state(s){state=structuredClone(s);},async read(id){return {id,title:'miczin dear-wallet',state:structuredClone(state),tables:{},sheets:[]};},async write(snapshot,patches){writes.push(patches);state=applyPatches(state,patches);}};
+ return {writes,get state(){return structuredClone(state);},set state(s){state=structuredClone(s);},async read(id){return {id,title:'Test wallet',state:structuredClone(state),tables:{},sheets:[]};},async write(snapshot,patches){writes.push(patches);state=applyPatches(state,patches);}};
 }
 function device(remote,initial=emptyState()){
  let local=structuredClone(initial);const storage=memoryStorage();

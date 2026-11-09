@@ -1,11 +1,11 @@
 # Google Sheets 연결
 
-현재 배포는 GitHub Pages의 정적 웹앱이며, Google Identity Services의 OAuth 팝업과 Google Sheets API를 브라우저에서 직접 사용합니다. 별도 백엔드·서비스 계정·공개 시트·OAuth client secret이 필요하지 않습니다. 공개 클라이언트 ID와 기본 시트 ID는 `src/google-config.js`에 있습니다.
+현재 배포는 GitHub Pages의 정적 웹앱이며, Google Identity Services의 OAuth 팝업과 Google Sheets API를 브라우저에서 직접 사용합니다. 별도 백엔드·서비스 계정·공개 시트·OAuth client secret이 필요하지 않습니다. 공개 클라이언트 ID는 `src/google-config.js`에 있습니다. 개인 시트 주소·ID는 소스에 넣지 않고 각 사용자가 설정에서 입력합니다.
 
 ## 사용자 연결 순서
 
 1. 앱 상단 설정 → **구글 시트와 함께 쓰기**로 이동합니다.
-2. 기존 시트 주소 또는 ID를 확인합니다. 처음 보내준 시트가 기본값이며 다른 시트라면 주소를 바꿉니다.
+2. 기존 시트 주소 또는 ID를 확인합니다. 처음 연결할 때는 주소 또는 ID를 직접 입력합니다. 이미 연결한 기기는 그 기기에 저장된 연결 정보를 사용합니다.
 3. **구글 로그인 · 시트 확인**을 누르고 시트를 편집할 수 있는 계정으로 로그인합니다.
 4. 표시되는 실제 시트 이름과 기록 수를 확인합니다. 이 단계에서는 시트 내용을 바꾸지 않습니다.
 5. **이 기기 기록도 합쳐서 연결** 또는 **시트 기록만 불러와 연결**을 선택합니다. 기존 로컬 기록은 연결 전에 `dear-wallet.beforeSheets.<시각>` 로컬 저장 키에 별도로 복사합니다.

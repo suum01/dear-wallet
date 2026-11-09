@@ -54,13 +54,15 @@ with sync_playwright() as p:
       assert all('formulaValue' not in cell.get('userEnteredValue',{}) for cell in row['values'])
       table['rows'].append([cell.get('userEnteredValue',{}).get('numberValue',cell.get('userEnteredValue',{}).get('stringValue','')) for cell in row['values']])
    route.fulfill(headers={'Access-Control-Allow-Origin':'*'},json={'replies':[]});return
-  route.fulfill(headers={'Access-Control-Allow-Origin':'*'},json={'spreadsheetId':'1SRhTmZ93acASOpeXKm-gZJuN-178ICvIL5VSBNwCIEo','properties':{'title':'miczin dear-wallet'},'sheets':[{'properties':{'sheetId':v['id'],'title':name}} for name,v in sheets.items()]})
+  route.fulfill(headers={'Access-Control-Allow-Origin':'*'},json={'spreadsheetId':'test-sheet-id-00000000000000000000000000000000','properties':{'title':'Test wallet'},'sheets':[{'properties':{'sheetId':v['id'],'title':name}} for name,v in sheets.items()]})
  def setup(context,page):
   context.route('https://accounts.google.com/gsi/client',lambda route:route.fulfill(content_type='text/javascript',body=SDK))
   context.route('https://sheets.googleapis.com/**',endpoint)
   page.on('pageerror',lambda error:errors.append(str(error)))
  def settings(page):page.locator('.topbar [data-open=settings]').click()
  def login(page):
+  if page.locator('#sheet-url').is_enabled():
+   page.locator('#sheet-url').fill('test-sheet-id-00000000000000000000000000000000')
   page.locator('#google-connect').click()
  def close_settings(page):page.locator('#settings-dialog [data-close]').click()
  def wait_sync(page):expect(page.locator('#sync-banner-text')).to_contain_text('시트 저장 완료',timeout=15000)
@@ -72,8 +74,8 @@ with sync_playwright() as p:
  setup(a_context,a)
  initial={'version':1,'settings':{'periodMode':'calendar','payday':25},'budgets':{},'fixedCosts':[],'bookmarks':[],'entries':[{'id':'local','date':date,'type':'expense','amount':12000,'merchant':'이 기기 기록','reason':'','category':'미분류','fixedId':None}]}
  a.evaluate('(s)=>localStorage.setItem("dear-wallet.v1",JSON.stringify(s))',initial);a.reload()
- settings(a);expect(a.locator('#google-connect')).to_be_enabled();login(a)
- expect(a.locator('#sheet-preview')).to_be_visible();expect(a.locator('#sheet-preview-description')).to_contain_text('miczin dear-wallet')
+ settings(a);expect(a.locator('#sheet-url')).to_have_value('');expect(a.locator('#google-connect')).to_be_enabled();login(a)
+ expect(a.locator('#sheet-preview')).to_be_visible();expect(a.locator('#sheet-preview-description')).to_contain_text('Test wallet')
  # Inspection must be read-only until the user chooses how to connect.
  assert not writes
  a.locator('#sheet-merge').click();wait_sync(a);close_settings(a)

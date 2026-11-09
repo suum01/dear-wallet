@@ -26,6 +26,8 @@ jobs:
         run: npm ci
       - name: Check JavaScript
         run: npm run check
+      - name: Check public source for private data
+        run: npm run audit:public
       - name: Test budget and calendar calculations
         run: npm test
       - name: Build public files

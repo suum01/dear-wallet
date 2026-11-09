@@ -1,6 +1,6 @@
 import { emptyState, parseState } from './domain.js';
 import { GoogleSheets, stateDiff, applyPatches, mergeForConnection, spreadsheetId } from './sheets.js';
-import { GOOGLE_CLIENT_ID, DEFAULT_SPREADSHEET_ID } from './google-config.js';
+import { GOOGLE_CLIENT_ID } from './google-config.js';
 const META_KEY='dear-wallet.sheets.v1';
 function defaultStorage(){try{return globalThis.localStorage;}catch{return {getItem:()=>null,setItem:()=>{throw new Error('브라우저 저장 권한을 확인해주세요.');},removeItem:()=>{throw new Error('브라우저 저장 권한을 확인해주세요.');}};}}
 const SCOPE='https://www.googleapis.com/auth/spreadsheets';
@@ -77,7 +77,7 @@ export function mountSheetSync({getLocal,applyLocal,isDemo,isLocalReady,onApplie
   const sync=new SheetSync({getLocal,applyLocal:state=>{applyLocal(state);onApplied();},isDemo,isLocalReady,onChange:render});
   function render(){
     const meta=sync.meta,dirty=sync.dirty();
-    $('#sheet-url').value=meta?.id || $('#sheet-url').value || DEFAULT_SPREADSHEET_ID;
+    $('#sheet-url').value=meta?.id || $('#sheet-url').value;
     $('#sheet-url').disabled=!!meta || sync.busy || authBusy;
     $('#google-connect').disabled=sync.busy || preparing || authBusy || isDemo();
     $('#google-connect').textContent=preparing?'구글 로그인 준비 중…':authBusy?'구글 로그인 중…':meta?'구글 로그인 · 동기화':'구글 로그인 · 시트 확인';

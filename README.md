@@ -92,4 +92,5 @@ npm run build
 - [AI 자동 분류 연결 — 운영자 설정 안내](docs/ai-categorization.md)
 - [카테고리 분류와 직접 선택](docs/categorization.md)
 - [돌아보기 집계 기준](docs/review.md)
+- [공개 설정과 개인정보 보호](docs/security.md)
 - [Google Sheets 연결 — 선택 기능](docs/google-sheets.md)
