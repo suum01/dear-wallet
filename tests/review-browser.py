@@ -21,7 +21,7 @@ with sync_playwright() as p:
  def nav(view):page.locator('.bottom-nav [data-nav='+view+']' if page.viewport_size['width']<700 else '.desktop-nav [data-nav='+view+']').click()
  seed(state);expect(page.locator('#review-total-expense')).to_have_text('61,000원');expect(page.locator('#review-total-income')).to_have_text('2,005,000원');expect(page.locator('#review-net')).to_have_text('1,944,000원')
  expect(page.locator('#review-expense-rows tr')).to_have_count(3);expect(page.locator('#review-income-rows tr')).to_have_count(2);expect(page.locator('#review-expense-rows')).to_contain_text('65.6%');expect(page.locator('#review-expense-rows')).to_contain_text('미분류');expect(page.locator('#review-expense-rows')).to_contain_text('반려동물')
- expect(page.locator('#review-expense-chart circle')).to_have_count(4);expect(page.locator('#review-next')).to_be_disabled()
+ expect(page.locator('#review-expense-chart circle')).to_have_count(1);expect(page.locator('#review-expense-chart path[role=button]')).to_have_count(3);expect(page.locator('#review-next')).to_be_disabled()
  Path('artifacts').mkdir(exist_ok=True)
  for width in [320,375,390,430,768,1024,1440]:
   page.set_viewport_size({'width':width,'height':1000});assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),f'Review overflow {width}'

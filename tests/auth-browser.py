@@ -60,11 +60,11 @@ with sync_playwright() as p:
  page.evaluate("window.testLoginError='auth/popup-closed-by-user'");page.locator('#google-sign-in').click();expect(page.locator('#login-status')).to_contain_text('취소');expect(page.locator('#app-shell')).to_be_hidden()
  page.evaluate("window.testLoginError='auth/popup-blocked'");page.locator('#google-sign-in').click();expect(page.locator('#login-status')).to_contain_text('차단');expect(page.locator('#app-shell')).to_be_hidden()
  page.evaluate('window.testLoginError=null');page.locator('#google-sign-in').click();expect(page.locator('#app-shell')).to_be_visible();expect(page.locator('#login-view')).to_be_hidden();expect(page.locator('#spent')).to_have_text('10,000원')
- page.locator('.bottom-nav [data-nav=review]').click();expect(page.locator('#review-view')).to_be_visible();expect(page.locator('#review-total-expense')).to_have_text('10,000원');page.locator('.bottom-nav [data-nav=home]').click()
+ page.locator('.bottom-nav [data-nav=review]').click();expect(page.locator('#review-view')).to_be_visible();expect(page.locator('#review-total-expense')).to_have_text('10,000원');page.locator('#review-expense-rows button').click();expect(page.locator('#review-detail-entries')).to_contain_text('alice-only');page.locator('#review-detail-dialog [data-close]').click();page.locator('.bottom-nav [data-nav=home]').click()
  # Session restoration opens the same account directly.
  page.reload();expect(page.locator('#app-shell')).to_be_visible();expect(page.locator('#spent')).to_have_text('10,000원')
  page.locator('.topbar [data-open=settings]').click();expect(page.locator('#account-email')).to_have_text('alice@example.test');page.locator('#session-sign-out').click();expect(page.locator('#login-view')).to_be_visible();expect(page.locator('#app-shell')).to_be_hidden()
- expect(page.locator('#review-total-expense')).to_have_text('0원');expect(page.locator('#review-expense-rows tr')).to_have_count(0)
+ expect(page.locator('#review-total-expense')).to_have_text('0원');expect(page.locator('#review-expense-rows tr')).to_have_count(0);expect(page.locator('#review-detail-entries button')).to_have_count(0);expect(page.locator('#review-detail-title')).to_have_text('카테고리 내역');expect(page.locator('#review-detail-total')).to_have_text('0원')
  # Another account must never see Alice's local cache or remote records.
  page.evaluate("window.testNextUser='bob'");page.locator('#google-sign-in').click();expect(page.locator('#spent')).to_have_text('23,000원');expect(page.locator('#app-shell')).to_be_visible()
  page.locator('.bottom-nav [data-nav=review]').click();expect(page.locator('#review-total-expense')).to_have_text('23,000원');page.locator('.bottom-nav [data-nav=home]').click()

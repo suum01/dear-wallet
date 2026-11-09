@@ -43,8 +43,8 @@ function persist(next) {
 }
 const current = () => demo || state;
 const categoryPicker=createCategoryPicker({root:$('#category-label'),input:$('#record-form').elements.category,toggle:$('#category-toggle'),list:$('#category-options'),getType:()=>$('#record-form').elements.type.value,getOptions:()=>categoryOptions($('#record-form').elements.type.value,current().settings.customCategories),onSelect:value=>{const input=$('#record-form').elements.category;input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));}});
-const reviewUI=createReview({getState:current});
-let activeView = 'home', recordReturnDate = null, editingEntry = null, undoDeletion = null;
+const reviewUI=createReview({getState:current,onEdit:(entry,trigger)=>{openDialog('record',trigger,entry);recordReturnReview=true;}});
+let activeView = 'home', recordReturnDate = null, recordReturnReview=false, editingEntry = null, undoDeletion = null;
 const historyUI = createHistory({ getState: current, onOpenSheet: trigger => { $('#day-dialog').returnFocus = trigger; }, onRecord: (date, trigger) => {
   openDialog('record', trigger); $('#record-form').elements.date.value = date; recordReturnDate = date;
 }, onEdit: (entry, date, trigger) => {
@@ -99,7 +99,7 @@ function openDialog(name, trigger, entry = null) {
     categoryPicker.close();
     liveAI.cancel();recordVersion++;$('#record-form [type=submit]').disabled=false;
     pendingCategory=null;declinedSuggestionKey=null;
-    recordReturnDate = null; editingEntry = entry ? structuredClone(entry) : null;
+    recordReturnDate = null;recordReturnReview=false;editingEntry = entry ? structuredClone(entry) : null;
     $('#record-title').textContent = entry ? '기록을 다듬어요' : '오늘의 작은 기록';
     $('#record-dialog .dialog-description').textContent = entry ? '바뀐 내용은 달력과 예산에 함께 반영돼요.' : '카테고리 고민 없이, 쓴 만큼만 남겨요.';
     $('#record-form [type=submit]').textContent = entry ? '수정 저장하기' : '기록 저장하기';
@@ -133,6 +133,7 @@ document.querySelectorAll('dialog').forEach(dialog => {
   dialog.addEventListener('click', e => { if (e.target === dialog) { const r = dialog.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) dialog.close(); } });
   dialog.addEventListener('close', () => {
     if(dialog.id==='record-dialog'){liveAI.cancel();categoryPicker.close();recordVersion++;}
+    if(dialog.id==='record-dialog' && recordReturnReview){recordReturnReview=false;if(activeView==='review' && reviewUI.resumeDetails())return;}
     if (dialog.id === 'record-dialog' && recordReturnDate && activeView === 'history') {
       const date = recordReturnDate; recordReturnDate = null; historyUI.showDay(date); return;
     }
@@ -141,6 +142,7 @@ document.querySelectorAll('dialog').forEach(dialog => {
 });
 function navigate(view, focus = false) {
   activeView = ['history','review'].includes(view) ? view : 'home';
+  if(activeView!=='review'){recordReturnReview=false;reviewUI.closeDetails();}
   for(const name of ['home','history','review'])$(`#${name}-view`).hidden=activeView!==name;
   $('.mobile-record').hidden=activeView==='review';
   const title={home:'홈',history:'내역',review:'돌아보기'}[activeView];
@@ -352,7 +354,7 @@ render(); if (storageBlocked) toast('브라우저 저장 공간이나 기존 데
 function clearSessionView(){
   reviewUI.reset();
   liveAI.cancel();recordVersion++;pendingCategory=null;declinedSuggestionKey=null;
-  sheetUI?.sync.cancelTimer();activeAccount=null;demo=null;undoDeletion=null;recordReturnDate=null;editingEntry=null;legacyImport=null;activeView='home';state=emptyState();$('#account-import-preview').hidden=true;
+  sheetUI?.sync.cancelTimer();activeAccount=null;demo=null;undoDeletion=null;recordReturnDate=null;recordReturnReview=false;editingEntry=null;legacyImport=null;activeView='home';state=emptyState();$('#account-import-preview').hidden=true;
   document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());render();
 }
 function openLegacy(){

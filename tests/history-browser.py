@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:3000/").rstrip("/") + "/"
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright,expect
 
 with sync_playwright() as p:
     browser=p.chromium.launch(executable_path=os.environ.get('CHROMIUM_PATH','/usr/bin/chromium'),args=['--no-sandbox','--disable-dev-shm-usage'])
@@ -16,8 +16,8 @@ with sync_playwright() as p:
     date=page.evaluate("new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())")
     previous=date[:8]+'01'
     page.locator('.bottom-nav [data-nav=history]').click()
-    assert page.locator('#history-view').is_visible()
-    assert page.locator('#home-view').is_hidden()
+    expect(page.locator('#history-view')).to_be_visible()
+    expect(page.locator('#home-view')).to_be_hidden()
     page.locator(f'[data-date="{previous}"]').click()
     assert page.locator('#day-dialog').is_visible()
     assert page.locator('#day-empty').is_visible()
@@ -54,7 +54,7 @@ with sync_playwright() as p:
     assert page.locator('#calendar-month').inner_text()==month
     page.reload()
     page.locator('.bottom-nav [data-nav=history]').click()
-    assert page.locator('#history-view').is_visible()
+    expect(page.locator('#history-view')).to_be_visible()
     assert '32,000원' in page.locator(f'[data-date="{previous}"]').get_attribute('aria-label')
     Path('artifacts').mkdir(exist_ok=True)
     for width in [320,375,390,430,768,1024,1440]:
@@ -72,7 +72,7 @@ with sync_playwright() as p:
     page.locator('.bottom-nav [data-nav=home]').click()
     assert page.locator('#ring-value').inner_text()=='32,000원'
     page.go_back()
-    assert page.locator('#history-view').is_visible()
+    expect(page.locator('#history-view')).to_be_visible()
     # Future dates can be inspected, but not recorded.
     page.locator('#calendar-next').click()
     page.locator('#calendar-days button').first.click()
